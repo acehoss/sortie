@@ -68,7 +68,7 @@ Delegate to the **Coder** subagent. Your prompt to the Coder must include:
    - The issue title, body, and labels (issue-driven): _"Implement the following issue. No plan exists - analyze the request, identify required changes, and implement atomically."_
    - The raw description (description-driven): same as issue-driven
 3. The instruction to read `docs/architecture-digest.md` before writing any code (open the full `docs/architecture.md` only on a deep-read trigger from the digest)
-4. The instruction to apply constraints from `.github/instructions/go-codestyle.instructions.md`, `.github/instructions/go-documentation.instructions.md`, and `.github/instructions/go-logging.instructions.md`
+4. The Coding Agent Instruction to apply constraints
 5. The instruction: _"If you encounter spec deviations - where the specification, plan, or architecture doc contradicts the actual codebase - follow your Spec Deviation Protocol. Create `.findings/Finding-{SLUG}.md` for each deviation. Continue implementing what you can."_
 6. The instruction to **provide an implementation summary** when finished, including any spec deviation files created, and to report the paths of any `.findings/` files so the orchestrator can enumerate them without re-scanning the workspace
 

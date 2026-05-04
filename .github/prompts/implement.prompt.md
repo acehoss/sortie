@@ -15,12 +15,6 @@ Before writing any code, read the relevant sections of [Architecture](../../docs
 
 **If no plan exists:** analyze the request, identify required changes across all layers (domain → service → adapter → integration), and implement atomically following the architecture guidelines.
 
-You MUST adhere to the following constraints:
-
-- [Go Code Style](../instructions/go-codestyle.instructions.md)
-- [Go Structured Logging](../instructions/go-logging.instructions.md)
-- [Go Documentation Guidelines](../instructions/go-documentation.instructions.md)
-
 When finished, provide an implementation summary (files modified, changes made, testing considerations) and use the **Verify Implementation** handoff to pass work to the Tester agent.
 
 ${input:request:Path to plan file or feature description}

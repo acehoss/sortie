@@ -64,8 +64,7 @@ Write the spec to `.specs/Spec-{TASK_NAME}.md`.
 
 After drafting, verify the spec against the quality checklist before delivering.
 
-> Read [references/quality-checklist.md](references/quality-checklist.md) for the
-> full verification criteria.
+> Read [references/quality-checklist.md](references/quality-checklist.md) for the full verification criteria.
 
 At minimum, confirm:
 
@@ -93,8 +92,6 @@ If the script is unavailable, manually verify:
 
 Report the spec file path after completion.
 
----
-
 ## Output Style Rules
 
 These rules are non-negotiable. Violations produce specs that mislead implementers.
@@ -106,13 +103,3 @@ These rules are non-negotiable. Violations produce specs that mislead implemente
 5. **NO SYMPHONY PATTERNS.** Do not reference or replicate OpenAI Symphony, Elixir, or BEAM patterns. This project diverges intentionally.
 6. **NO GENERIC NAMING VIOLATIONS.** Core specs use `agent_*`, `tracker_*`, `session_*`. Never `jira_*`, `claude_*`, `codex_*` outside adapter package specs.
 7. **CITE THE SPEC.** Reference specific `docs/architecture.md` sections using Markdown anchor-links (e.g., `[Section 9.6](../docs/architecture.md#96-workspace-safety)`) for every design decision that traces to the spec.
-
----
-
-## Coding Standards
-
-The specification must respect these project standards. Read the relevant instruction files when designing interfaces, struct layouts, and error types:
-
-- **Go Code Style** (`.github/instructions/go-codestyle.instructions.md`) — naming, control flow, comment structure, Go 1.22+ idioms
-- **Go Documentation** (`.github/instructions/go-documentation.instructions.md`) — package comments, exported symbol docs, godoc conventions
-- **Go Structured Logging** (`.github/instructions/go-logging.instructions.md`) — slog patterns, context field propagation

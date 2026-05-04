@@ -11,10 +11,4 @@ Before planning, read the relevant sections of [Architecture](../../docs/archite
 
 Follow your planning process and output format rules strictly.
 
-You MUST adhere to the following constraints:
-
-- [Go Code Style](../instructions/go-codestyle.instructions.md)
-- [Go Structured Logging](../instructions/go-logging.instructions.md)
-- [Go Documentation Guidelines](../instructions/go-documentation.instructions.md)
-
 ${input:request:Path to spec file or feature description}
