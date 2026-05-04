@@ -24,22 +24,6 @@ Translate a technical specification into a rigorous, atomic, linearly-executable
 
 A good plan is the compiled form of a spec: it removes ambiguity, sequences dependencies, and names every file and signature that will change. A bad plan forces the Developer Agent to re-interpret the spec on every step, which is how drift from the architecture doc starts.
 
-## When to use
-
-| User intent                                                          | Apply? |
-|----------------------------------------------------------------------|--------|
-| "Make a plan for Spec-*.md" / "plan this feature"                    | Yes    |
-| "Break down this spec into steps"                                    | Yes    |
-| "Convert this Jira issue / GitHub issue into a Plan-*.md"            | Yes    |
-| "What's the plan for adding X"                                       | Yes    |
-| "Sequence the work for this refactor"                                | Yes    |
-| "Decompose this into phases"                                         | Yes    |
-| "Write the spec for X" (no plan)                                     | No — use writing-specs |
-| "Implement this plan" / "write the code"                             | No — Coder or Tester   |
-| "Review this PR"                                                     | No — Reviewer          |
-| "Document this ADR"                                                  | No — manage-adrs     |
-| "Resolve review feedback"                                            | No — babysit-pr        |
-
 ## Inputs
 
 Before drafting, confirm you have:

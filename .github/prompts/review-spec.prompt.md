@@ -9,7 +9,7 @@ Your task is to conduct an in-depth architectural review of the specification de
 
 Before writing anything, read the relevant sections of [Architecture](../../docs/architecture.md) — this is the authoritative specification for all domain models, state machines, algorithms, and validation rules.
 
-Apply review standards from: [Code Review Guidelines](../instructions/code-review.instructions.md)
+Apply relevant review standards from Code Review Guidelines: `.github/copilot-instructions.md`.
 
 ## Task
 
