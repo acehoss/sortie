@@ -5,10 +5,7 @@ description: >
   decisions. Use when asked to specify, architect, design, write a spec,
   define requirements, or analyze a feature request.
 argument-hint: Specify the feature or idea to architect
-model:
-  - GPT-5.4 (copilot)
-  - Claude Opus 4.7 (copilot)
-  - Gemini 3.1 Pro (Preview) (copilot)
+model: GPT-5.5 (copilot)
 tools:
   - execute/getTerminalOutput
   - execute/killTerminal

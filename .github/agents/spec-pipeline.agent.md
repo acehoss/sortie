@@ -13,7 +13,7 @@ tools:
   - read/readFile
   - todo
   - github.vscode-pull-request-github/issue_fetch
-model: Claude Sonnet 4.6 (copilot)
+model: GPT-5.5 (copilot)
 agents:
   - Architect
   - Reviewer
