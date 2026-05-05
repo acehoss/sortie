@@ -52,11 +52,11 @@ Delegate to the **Reviewer** subagent. Your prompt to the Reviewer must include:
 5. The output path: `.reviews/Review-{TASK_NAME}.md`
 6. The instruction to apply review standards from `.github/instructions/code-review.instructions.md`
 7. The instruction to **report the exact file path** of the created review
-8. The instruction to end the subagent result with the **Subagent Return Line** specified in `reviewer.agent.md` (format: `path=<...>; critical=N; significant=M; observations=K; verdict=approve|revise`). This line is the machine-readable handoff.
+8. The instruction to end the subagent result with the **Subagent Return Line** specified in Reviewer agent (format: `path=<...>; critical=N; significant=M; observations=K; verdict=approve|revise`). This line is the machine-readable handoff.
 
 ### Phase 3: Revise if Needed
 
-Parse the **Subagent Return Line** from the Reviewer's subagent result (format specified in `reviewer.agent.md`). Extract `critical`, `significant`, and `verdict`.
+Parse the **Subagent Return Line** from the Reviewer's subagent result (format specified in Reviewer agent). Extract `critical`, `significant`, and `verdict`.
 
 If the return line is missing or malformed, fall back to reading the review artifact from `.reviews/` and counting findings manually — then log the Reviewer's protocol violation in the Phase 5 summary so it can be fixed.
 
