@@ -62,17 +62,22 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### Commands
 
-Read the Makefile to discover available targets before running any Go toolchain commands directly.
+Read the project Makefile to discover available targets before running any Go toolchain commands directly.
 
 ### Gotchas
 
 - Go is managed by asdf. The `go` binary resolves through `~/.asdf/shims/go`.
-- **Architecture doc is the spec.** `docs/architecture.md` (~3600 lines) defines every entity, state machine, algorithm, and validation rule. Read the relevant section before implementing anything. Drift from the spec is a bug.
-- **Symphony is prior art, not a template.** Sortie derives from OpenAI Symphony but diverges intentionally (Go instead of Elixir, SQLite persistence, adapter interfaces). Do not copy Symphony patterns or Elixir idioms.
+- **Architecture doc is the spec.** `docs/architecture.md` (~3600 lines) defines every entity, state machine, algorithm, and validation rule. Read the relevant section before implementing anything. Drift from the spec is a bug. The digest verson `docs/architecture-digest.md` is a 2-page map of the system for AI agents. Read it first, then consult the full doc as needed.
+- **Symphony is prior art, not a template.** Sortie derives from OpenAI Symphony but diverges intentionally (Go instead of Elixir, SQLite persistence, adapter interfaces). Do NOT copy Symphony patterns or Elixir idioms.
 - **Workspace safety invariants are security boundaries.** Path containment under workspace root, sanitized workspace keys (`[A-Za-z0-9._-]` only), and cwd validation before agent launch are mandatory — not suggestions. See architecture Section 9.6.
 - **Generic naming in core code.** Use `agent_*`, `tracker_*`, `session_*` in orchestrator core. Never `jira_*`, `claude_*`, `codex_*` outside their adapter packages.
 - **Integration tests are env-gated.** `SORTIE_JIRA_TEST=1` for Jira, `SORTIE_GITHUB_TEST=1` for GitHub adapter integration tests, `SORTIE_GITHUB_E2E=1` for GitHub E2E orchestrator tests (also requires `SORTIE_GITHUB_TOKEN` and `SORTIE_GITHUB_PROJECT`), `SORTIE_CLAUDE_TEST=1` for Claude Code, `SORTIE_COPILOT_TEST=1` for Copilot. Without these vars, integration tests must skip cleanly — never fail.
 - **SQLite library is `modernc.org/sqlite` only.** Never `mattn/go-sqlite3` — CGo breaks the single-binary zero-dependency deployment model.
+- **`internal/scm/` is an adapter family.** Apply the same boundary rules as `internal/tracker/*/`: no cross-adapter imports, no orchestrator imports, normalize external responses to domain types at the boundary. The coder agent's layer constraints enumerate trackers and agents but omit SCM — treat that gap as a drafting bug, not permission.
+- **Orchestrator and `cmd/sortie` reach adapters via `internal/registry`.** Direct imports of `internal/tracker/<kind>` or `internal/agent/<kind>` from these layers are layering violations even though `go build` accepts them.
+- **Shared adapter helpers go in `internal/httpkit`, `internal/issuekit`, `internal/trackermetrics`, `internal/typeutil`, `internal/registry`.** Do not duplicate the helper per adapter, and do not push it into `internal/domain/`.
+- **`workflow.Manager.Reload()` is fail-safe.** On parse or validation error the previous `currentConfig` and `currentPrompt` are retained and `LastLoadError()` reports the failure. Preserve this invariant when modifying the loader; never `os.Exit` on a bad WORKFLOW.md.
+- **Prompt templates render with `Option("missingkey=error")`.** Adding a new template variable without wiring the corresponding data field is a runtime error, not an empty string. Update the data map at the same time you add the variable.
 
 ### Boundaries
 
@@ -84,17 +89,16 @@ Read the Makefile to discover available targets before running any Go toolchain 
 
 #### Ask first
 
-- Any change to `docs/architecture.md` or `docs/decisions/*.md`.
+- Any change to `docs/decisions/*.md`.
 - Adding dependencies beyond what the architecture specifies.
 
 #### Never
 
-- Modify accepted ADRs in `docs/decisions/` without explicit instruction.
+- Modify accepted ADRs in `docs/decisions/*.md` without explicit instruction.
 - Use CGo or any library requiring a C toolchain.
 - Put integration-specific logic (Jira field names, Claude Code CLI flags) in orchestrator core packages.
 - Weaken workspace path containment or sanitization rules.
-- Edit `LICENSE` or `README.md` without explicit instruction.
-- Do not reference `docs/architecture.md`, `docs/decisions/`, section numbers, ADR numbers, or ticket IDs in any comment — godoc or inline. Those belong in specs and plans, not in source files.
+- Do not reference `docs/architecture.md`, `docs/decisions/*.md`, section numbers, ADR numbers, or ticket IDs in any comment — godoc or inline. Those belong in specs and plans, not in source files.
 - NEVER prefix commands with `GOPATH=...`, `GOMODCACHE=...`, or any Go environment overrides. The asdf shim configures everything.
 - NEVER use `/usr/local/go/bin/go`, `/usr/bin/go`, or any absolute path to a Go binary.
 - NEVER downgrade the `go` directive in `go.mod`. NEVER add or modify `toolchain` directives in `go.mod` unless explicitly asked.
@@ -103,13 +107,8 @@ Read the Makefile to discover available targets before running any Go toolchain 
 
 Consult these on demand for the area you are working on, not as a blanket prerequisite to read upfront:
 
-- `docs/architecture-digest.md` -  a 2-page map of the system for AI agents. Read this document as your first reference during specification, planning, and review. Open the full `docs/architecture.md` only when the feature you are working on touches one of the areas flagged in the "deep-read" section at the bottom.
+- `docs/architecture-digest.md` - a 2-page map of the system for AI agents. Read this document as your first reference during specification, planning, and review. Open the full `docs/architecture.md` only when the feature you are working on touches one of the areas flagged in the "deep-read" section at the bottom.
 - `docs/architecture.md` - the full specification (~3600 lines). Read the section that covers the entity, state machine, algorithm, or contract you are about to change. Do not read the document end-to-end before starting work.
-- `docs/decisions/` - accepted ADRs. Read when discussing or revising a prior design choice.
+- `docs/decisions/*.md` - accepted ADRs. Read when discussing or revising a prior design choice.
 - `docs/workflow-reference.md` - WORKFLOW.md syntax reference.
-
----
-
-Last updated: 2026-04-26
-
-Maintained by: AI Agents under human supervision
+- `docs/*-adapter-notes.md` - Adapter Research Notes with API details, response examples, and implementation tips for each integration. Read the relevant file when working on an adapter integration.
