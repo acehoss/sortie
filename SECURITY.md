@@ -4,12 +4,11 @@
 
 Sortie follows [Semantic Versioning](https://semver.org/). Security fixes are applied to the **current minor release** of the latest major version. The immediately preceding minor enters a **3-month security-maintenance window** during which it continues to receive critical and high severity security patches only.
 
-| Version   | Supported                          |
-|-----------|------------------------------------|
-| 1.9.x     | Yes (1.9.1 recommended)            |
-| 1.8.x     | Security patches until 26 Jul 2026 |
-| < 1.8     | No                                 |
-
+| Version | Supported |
+|---------|-----------|
+| 1.9.x | Yes (1.9.1 recommended) |
+| 1.8.x | Security patches until 26 Jul 2026 |
+| < 1.8 | No |
 When a new minor version ships (e.g., 1.9.0), the immediately preceding minor (e.g., 1.8.x) enters a 3-month security-maintenance window. During that window, only critical and high severity patches are backported; all other fixes ship only on the current minor. After the window ends, only the current minor release of the latest major version is supported; all older versions are unsupported.
 
 ## Reporting a Vulnerability
@@ -26,12 +25,12 @@ with the subject line `[VULNERABILITY] <short description>`.
 
 A good report helps us triage quickly. Please include:
 
-- **Affected component** &mdash; e.g., workspace manager, config loader, agent adapter, persistence layer.
-- **Sortie version** &mdash; output of `sortie version` or the Git commit SHA.
-- **Environment** &mdash; OS, architecture, Go version (if building from source).
-- **Steps to reproduce** &mdash; minimal WORKFLOW.md, commands, and configuration that trigger the issue.
-- **Impact assessment** &mdash; what an attacker can achieve (path traversal, secret leak, arbitrary execution, etc.).
-- **Proof of concept** &mdash; code, logs, or a patch demonstrating the issue. If you have a fix, include it.
+- **Affected component:** e.g., workspace manager, config loader, agent adapter, persistence layer.
+- **Sortie version:** output of `sortie version` or the Git commit SHA.
+- **Environment:** OS, architecture, Go version (if building from source).
+- **Steps to reproduce:** minimal WORKFLOW.md, commands, and configuration that trigger the issue.
+- **Impact assessment:** what an attacker can achieve (path traversal, secret leak, arbitrary execution, etc.).
+- **Proof of concept:** code, logs, or a patch demonstrating the issue. If you have a fix, include it.
 
 You do not need to encrypt your report. If you require encrypted communication,
 note this in your initial report and we will establish a secure channel.
