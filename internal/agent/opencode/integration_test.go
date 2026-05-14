@@ -171,18 +171,21 @@ func TestIntegration_InvalidModelFailure(t *testing.T) {
 		t.Fatalf("ExitReason = %q, want %q", result.ExitReason, domain.EventTurnFailed)
 	}
 
-	var sawTurnFailed bool
+	var sawTurnFailed, sawModelNotFound bool
 	for _, event := range events {
 		if event.Type != domain.EventTurnFailed {
 			continue
 		}
 		sawTurnFailed = true
-		if !strings.Contains(event.Message, "Model not found") {
-			t.Errorf("turn_failed message = %q, want invalid-model detail", event.Message)
+		if strings.Contains(event.Message, "Model not found") {
+			sawModelNotFound = true
 		}
 	}
 	if !sawTurnFailed {
 		t.Fatalf("expected turn_failed event for invalid model, events=%+v", events)
+	}
+	if !sawModelNotFound {
+		t.Errorf("expected at least one turn_failed event with invalid-model detail, events=%+v", events)
 	}
 }
 

@@ -486,6 +486,43 @@ func TestRunTurn_LogicalFailureExitZero(t *testing.T) {
 	}
 }
 
+func TestRunTurn_LogicalFailureDualError(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	script := writeRunFixtureScript(t, tmpDir, "logical_failure_dual_error.jsonl")
+
+	a, _ := NewOpenCodeAdapter(map[string]any{})
+	session := mustStartSession(t, a, tmpDir, script)
+
+	events, result, err := collectEvents(t, a, session, "work")
+	if err != nil {
+		t.Fatalf("RunTurn() error = %v, want nil", err)
+	}
+	if result.ExitReason != domain.EventTurnFailed {
+		t.Errorf("ExitReason = %q, want %q", result.ExitReason, domain.EventTurnFailed)
+	}
+
+	var turnFailedMessages []string
+	for _, event := range events {
+		if event.Type == domain.EventTurnEndedWithError {
+			t.Fatalf("unexpected turn_ended_with_error event: %+v", event)
+		}
+		if event.Type == domain.EventTurnFailed {
+			turnFailedMessages = append(turnFailedMessages, event.Message)
+		}
+	}
+	if len(turnFailedMessages) != 2 {
+		t.Fatalf("turn_failed count = %d, want 2 (one per upstream error event)", len(turnFailedMessages))
+	}
+	if !strings.Contains(turnFailedMessages[0], "Model not found") {
+		t.Errorf("first turn_failed message = %q, want substring %q", turnFailedMessages[0], "Model not found")
+	}
+	if !strings.Contains(turnFailedMessages[1], "Unexpected server error") {
+		t.Errorf("second turn_failed message = %q, want substring %q", turnFailedMessages[1], "Unexpected server error")
+	}
+}
+
 func TestRunTurn_OversizedStdoutLine(t *testing.T) {
 	t.Parallel()
 

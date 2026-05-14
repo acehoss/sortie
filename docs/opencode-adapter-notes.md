@@ -1,6 +1,7 @@
 # OpenCode CLI: adapter research notes
 
 > OpenCode CLI v1.14.25 (`opencode`, npm `opencode-ai`), researched April 2026.
+> Re-validated against v1.14.50 on 2026-05-14 — version-specific drift is called out inline.
 > Reference for implementing the OpenCode `AgentAdapter`.
 >
 > Primary sources, rendered docs: [CLI docs][cli-docs], [permissions docs][permissions-docs], [providers docs][providers-docs], [server docs][server-docs], [plugin events docs][plugins-docs].
@@ -9,9 +10,9 @@
 >
 > Primary sources, source code: [`run.ts`][run-src], [`permission/index.ts`][permission-src], [`config/permission.ts`][permission-config-src], [`config/config.ts`][config-src], [`flag/flag.ts`][flag-src], [SDK v2 types][sdk-v2-types], [published README][readme-src].
 >
-> Local validation: probes of `npx -y opencode-ai@latest` v1.14.25 on Linux on 2026-04-26.
+> Local validation: probes of `npx -y opencode-ai@latest` v1.14.25 on Linux on 2026-04-26, plus v1.14.50 on 2026-05-14.
 >
-> All source-code and raw-docs links below point at the `v1.14.25` tag — the exact version this note was validated against. Tags are immutable, so quoted code and line numbers stay correct. The rendered public docs at `opencode.ai/docs/...` track the latest published documentation and may move ahead of v1.14.25; where rendered docs and v1.14.25 source disagree, this note calls the drift out explicitly.
+> All source-code and raw-docs links below point at the `v1.14.25` tag — the exact version most claims were originally validated against. Tags are immutable, so quoted code and line numbers stay correct. Where v1.14.50 behavior diverges from v1.14.25 (failure exit code, stderr content, duplicated `error` events), the relevant section names both versions and the observed difference. The rendered public docs at `opencode.ai/docs/...` track the latest published documentation and may move ahead of both tagged versions; where rendered docs and tagged source disagree, this note calls the drift out explicitly.
 
 ## Overview
 
@@ -327,16 +328,17 @@ Tool payloads can be large. The `read` tool embeds the returned file content dir
 
 ### Example: logical failure
 
-Observed locally in v1.14.25 with an invalid model:
+Observed locally in v1.14.50 with an invalid model:
 
 ```text
-ProviderModelNotFoundError: ProviderModelNotFoundError
-...
-{"type":"error","timestamp":1777197598202,"sessionID":"ses_236c4ba84ffeKJLGiwxfHIx8Au","error":{"name":"UnknownError","data":{"message":"Model not found: nonexistent/nonexistent."}}}
-EXIT:0
+{"type":"error","timestamp":1778777973456,"sessionID":"ses_1d8921de2ffeMg3sLcTUjJxwoX","error":{"name":"UnknownError","data":{"message":"Model not found: nonexistent/nonexistent."}}}
+{"type":"error","timestamp":1778777973456,"sessionID":"ses_1d8921de2ffeMg3sLcTUjJxwoX","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details."}}}
+EXIT:1
 ```
 
-The stack trace was written to stderr, the CLI emitted an `error` JSON object on stdout, and the process exit code was still `0`. Observed locally in v1.14.25. The source path explains why: `run` calls `process.exit(1)` only for CLI setup failures or unhandled loop exceptions, not for `session.error` events.[run-src]
+Two `error` events are emitted on stdout for a single failure. The first carries the actionable diagnostic from the `session.error` event stream; the second is the generic HTTP 500 envelope from the in-process server when the underlying defect was not declared in the API error schema. Both arrive wrapped as `{"name":"UnknownError","data":{"message":...}}`. Adapters MUST iterate all `error` events rather than relying on a single emission; the first one is the meaningful diagnostic.
+
+Stderr is empty in v1.14.50, and the process exit code is `1`. In v1.14.25 stderr carried a `ProviderModelNotFoundError` stack trace and exit code was `0`; both behaviors changed in the v1.14.x series after the server migrated to `effect/unstable/http`. Treat exit code and stderr as informative but not load-bearing — the JSON `error` events on stdout remain the authoritative failure signal.
 
 ## Turn completion, failure detection, and `TurnResult` mapping
 
@@ -356,10 +358,10 @@ Practical implication:
 
 | Signal | Reliability | Notes |
 | ------ | ----------- | ----- |
-| Stdout `{"type":"error", ...}` | Better than exit code | Emitted from `session.error` |
+| Stdout `{"type":"error", ...}` | Authoritative | Emitted from `session.error`. A single failure can emit multiple `error` events (see logical-failure example) |
 | `tool_use` with `part.state.status == "error"` | Important, but not always terminal | Permission rejection and tool failures land here |
-| stderr text | Diagnostic only | Can contain stack traces or human-readable errors |
-| Process exit code | Weak | Observed locally: invalid model still exited `0` |
+| stderr text | Diagnostic only when present | v1.14.50 emits no stderr for `session.error`; older versions wrote stack traces |
+| Process exit code | Informative, not load-bearing | v1.14.50 exits `1` on `session.error`; v1.14.25 exited `0` for the same failure |
 
 For a Sortie adapter built on `opencode run`, a sensible normalization rule is:
 
@@ -432,7 +434,7 @@ OpenCode can load default plugins, project plugins, global plugins, and `.claude
 The evidence above supports two practical conclusions:
 
 - `opencode run --format json` is usable for a launch-per-turn adapter.
-- It is not a lossless wire protocol. It hides server status events, omits a final result envelope, can mix human text into stdout during permission rejection, and does not reliably signal logical failure via non-zero exit codes.[run-src] Observed locally in v1.14.25.
+- It is not a lossless wire protocol. It hides server status events, omits a final result envelope, and can mix human text into stdout during permission rejection.[run-src] Observed locally in v1.14.25. v1.14.50 added a duplicated `error` event for a single `session.error` (the second is a generic HTTP 500 wrapper from the new `effect/unstable/http` server layer), so adapters MUST iterate all `error` events instead of treating the first one as terminal.
 
 `opencode serve` is the cleaner long-term surface because it exposes explicit session, message, permission, and event APIs with documented schemas and an OpenAPI spec.[server-docs][sdk-docs]
 
@@ -446,7 +448,7 @@ If Sortie wants maximum symmetry with the existing Claude/Copilot launch-per-tur
 | Network port default wording | Server docs describe `4096` | Shared CLI options expose `0` in help/config, while the Bun/Node adapters treat `0` as "try `4096` first, then fall back to an ephemeral port" | High for `--attach`; always set `--port` explicitly |
 | `run --format json` | "raw JSON events" | CLI-emitted projection from [`run.ts`][run-src], not raw SSE | High for adapters |
 | Permissions in JSON mode | Not called out | Permission rejection prints a plain-text warning to stdout before JSON | High for parsers |
-| Exit codes | Not documented | Observed logical failure with exit code `0` | High for failure handling |
+| Exit codes | Not documented | v1.14.25 exited `0` on logical failure; v1.14.50 exits `1`. Treat as informative, not load-bearing | High for failure handling |
 | `--pure` flag | Not on docs page | Present in shipped help output | Medium for deterministic runs |
 | Permission keys | [`permissions.mdx`][permissions-docs-src] lists 14 keys | [`config/permission.ts`][permission-config-src] schema explicitly accepts 16 (adds `list`, `todowrite`) and any other string key via a `StructWithRest` catchall | Medium; adapters that strictly whitelist against the documented set break on configurations OpenCode itself accepts |
 | `OPENCODE_PERMISSION` precedence | Listed in env-var table, no merge semantics specified | [`config/config.ts` lines 656-658](https://github.com/anomalyco/opencode/blob/v1.14.25/packages/opencode/src/config/config.ts#L656-L658) call `mergeDeep(opencode.json.permission, JSON.parse(env))` — env var stacks on top of operator config, never replaces it | High; adapter must scrub inherited value and cover every key it cares about, otherwise operator-side policy bleeds in |
