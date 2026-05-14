@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-04-14
+
 ### Fixed
 
 - Orchestrator: CI and PR review pending reactions are now enqueued when
@@ -793,7 +795,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   execution via GitHub Actions.
 - Architecture Decision Records (ADR-0001 through ADR-0005).
 
-[Unreleased]: https://github.com/sortie-ai/sortie/compare/1.9.0...HEAD
+[Unreleased]: https://github.com/sortie-ai/sortie/compare/1.9.1...HEAD
+[1.9.1]: https://github.com/sortie-ai/sortie/compare/1.9.0...1.9.1
 [1.9.0]: https://github.com/sortie-ai/sortie/compare/1.8.0...1.9.0
 [1.8.0]: https://github.com/sortie-ai/sortie/compare/1.7.1...1.8.0
 [1.7.1]: https://github.com/sortie-ai/sortie/compare/1.7.0...1.7.1
