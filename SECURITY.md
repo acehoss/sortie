@@ -9,6 +9,7 @@ Sortie follows [Semantic Versioning](https://semver.org/). Security fixes are ap
 | 1.9.x | Yes (1.9.1 recommended) |
 | 1.8.x | Security patches until 26 Jul 2026 |
 | < 1.8 | No |
+
 When a new minor version ships (e.g., 1.9.0), the immediately preceding minor (e.g., 1.8.x) enters a 3-month security-maintenance window. During that window, only critical and high severity patches are backported; all other fixes ship only on the current minor. After the window ends, only the current minor release of the latest major version is supported; all older versions are unsupported.
 
 ## Reporting a Vulnerability
