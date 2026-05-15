@@ -9,7 +9,7 @@ Your task is to run the complete implementation pipeline for the request below.
 
 The pipeline:
 1. **Assesses the input** — determines the route (plan-driven, issue-driven, or description-driven) and whether a specification is needed first
-2. **Implements** — delegates to the Coder agent with full architectural context
+2. **Implements** — delegates to the GoCoder agent with full architectural context
 3. **Checks for spec deviations** — inspects `.findings/` for issues discovered during implementation
 4. **Tests** — delegates to the Tester agent with the implementation summary
 
