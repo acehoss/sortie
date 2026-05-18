@@ -49,7 +49,7 @@ Check items by converting `- [ ]` to `- [x]` as you verify them. Do not include 
 - [ ] Every step is atomic — sized for a single agent session (~one file, ~one signature, ~300 lines of implementation code max).
 - [ ] Every step has an explicit `**Verify:**` condition a Developer Agent can execute (`make build`, `make test`, `grep -c`, etc.).
 - [ ] Compound steps (three independent actions under one checkbox) are split.
-- [ ] Test additions are named, not written out — the Tester agent produces the bodies.
+- [ ] Test additions are named, not written out — the GoTester subagent produces the bodies.
 
 ---
 

@@ -22,7 +22,7 @@
 | #  | Rule                                                            | Why                                                                                     |
 |----|-----------------------------------------------------------------|-----------------------------------------------------------------------------------------|
 | 1  | No code blocks for implementations                              | The plan is a contract, not a first draft. Bodies belong to the Developer Agent.        |
-| 2  | No test implementations                                         | Tests are written by Tester agent against the plan's verify conditions.                 |
+| 2  | No test implementations                                         | Tests are written by GoTester subagent against the plan's verify conditions.                 |
 | 3  | Signatures only                                                 | Signatures are part of the design — bodies are not.                                     |
 | 4  | Logical steps, not code                                         | Natural-language descriptions survive refactors; `if err != nil` blocks don't.          |
 | 5  | Explicit file paths                                             | "Somewhere in `internal/`" forces re-planning during implementation.                    |
@@ -68,7 +68,7 @@
 The plan mentions tests only in two ways:
 
 1. **Verify conditions.** `**Verify:** go test ./internal/persistence/... -run TestLoadRetry -race` tells the Developer Agent what must pass. It does not say what the test body contains.
-2. **Named test additions.** Listing tests to add is fine (e.g. "Add `TestLoadRetryEntriesForRecovery_Mixed` covering past-due, exactly-now, and future entries"). The test body is the Tester agent's work.
+2. **Named test additions.** Listing tests to add is fine (e.g. "Add `TestLoadRetryEntriesForRecovery_Mixed` covering past-due, exactly-now, and future entries"). The test body is the GoTester subagent's work.
 
 Do not write `t.Run`, `assert.Equal`, table-driven test skeletons, or fixture construction in the plan. If the plan contains the test, the Developer Agent will copy it, and the test will mirror the plan's assumptions instead of verifying the code.
 
@@ -217,7 +217,7 @@ Scan the draft plan for each of these before Step 6 (writing the file):
 3. **Missing verify.** A step without `**Verify:**`. Every checkbox has a verify condition — even if the condition is "the file exists" or "`make build` compiles".
 4. **Compound steps.** A single `- [ ]` that contains three independent actions. Split them.
 5. **Unscoped steps.** "Add error handling" without naming which function, which error types, and which retry behavior.
-6. **Test body smuggling.** A step that lists assertions (`assert.Equal(expected, got)`) inside its bullets. Name the test and its intent; leave the body to Tester.
+6. **Test body smuggling.** A step that lists assertions (`assert.Equal(expected, got)`) inside its bullets. Name the test and its intent; leave the body to GoTester subagent.
 7. **Adapter leakage into core.** A step in Phase 6 (Orchestrator) that mentions `jira_*` or `claude_*` identifiers.
 8. **Oversized steps.** A step that would require more than ~300 lines of code or touches more than three files. Split it — or move the split to Phase 2 (classification).
 9. **Empty Constraint Check.** A phase ending in `- [ ] **Constraint Check:** <TBD>` or a one-word assertion. Every constraint check names the specific invariant it enforces.
