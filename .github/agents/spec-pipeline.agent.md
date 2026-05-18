@@ -46,7 +46,7 @@ After the Architect subagent returns, search `.specs/` for the created file. Con
 Delegate to the **Reviewer** subagent. Your prompt to the Reviewer must include:
 
 1. The exact spec file path from Phase 1
-2. The instruction to ground the review in project context by reading `AGENTS.md`, `docs/architecture-digest.md` (full `docs/architecture.md` only on deep-read trigger), and `docs/decisions/`
+2. The instruction to ground the review in project context by reading `CLAUDE.md`, `docs/architecture-digest.md` (full `docs/architecture.md` only on deep-read trigger), and `docs/decisions/`
 3. The instruction to study codebase structure and existing patterns before evaluating
 4. The instruction to classify each finding as **Critical**, **Significant**, or **Observation**
 5. The output path: `.reviews/Review-{TASK_NAME}.md`

@@ -12,7 +12,7 @@
 
 Post-draft verification. Run through every item after completing Phase 3 (Specification Drafting). A failing check must be fixed before delivering the spec.
 
-This checklist combines IEEE 830 / ISO 29148 requirement quality attributes with project-specific constraints from `AGENTS.md` and `docs/architecture.md`.
+This checklist combines IEEE 830 / ISO 29148 requirement quality attributes with project-specific constraints from `CLAUDE.md` and `docs/architecture.md`.
 
 ---
 
