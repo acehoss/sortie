@@ -80,7 +80,7 @@ that manages your session, retries failures, and monitors progress.
 
 Before making changes, read:
 
-- `AGENTS.md` for build commands and project boundaries
+- `CLAUDE.md` for build commands and project boundaries
 - `docs/architecture.md` for the relevant specification section
 - Any existing tests in the area you are modifying
 

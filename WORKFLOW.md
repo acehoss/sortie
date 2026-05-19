@@ -21,7 +21,6 @@ hooks:
   before_run: |
     git fetch origin main
     git checkout -B "sortie/${SORTIE_ISSUE_IDENTIFIER}" origin/main
-    cp AGENTS.md CLAUDE.md
   after_run: |
     rm -f CLAUDE.md
     make fmt 2>/dev/null || true
@@ -85,7 +84,7 @@ If it touches workspace, read Section 9.
 If it touches persistence, read Section 19.
 If it touches observability, read Section 13.
 
-Also read `AGENTS.md` for build commands and project boundaries.
+Also read `CLAUDE.md` for build commands and project boundaries.
 
 ### Step 2 — Identify the minimal change
 

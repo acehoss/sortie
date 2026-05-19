@@ -44,7 +44,7 @@ Existing adapter dimensions:
 
 ## 4. Hard constraints (memory refresh)
 
-These are reproduced here from `AGENTS.md` for quick reference. When in doubt, `AGENTS.md` is authoritative.
+These are reproduced here from `CLAUDE.md` for quick reference. When in doubt, `CLAUDE.md` is authoritative.
 
 - **Single statically-linked binary.** Zero runtime dependencies on the host. No CGo, no external database server, no shared libraries beyond the Go standard library and approved pure-Go modules.
 - **SQLite library is `modernc.org/sqlite` only.** Never `mattn/go-sqlite3` (CGo).
@@ -59,7 +59,7 @@ These are reproduced here from `AGENTS.md` for quick reference. When in doubt, `
 
 ## 5. When to deep-read the full spec
 
-Open [`docs/architecture.md`](architecture.md) when your feature touches one of the areas below. Otherwise, this digest plus `AGENTS.md` plus relevant ADRs from `docs/decisions/` is sufficient.
+Open [`docs/architecture.md`](architecture.md) when your feature touches one of the areas below. Otherwise, this digest plus `CLAUDE.md` plus relevant ADRs from `docs/decisions/` is sufficient.
 
 | Section in full spec                                  | Deep-read trigger                                                                                  |
 |-------------------------------------------------------|----------------------------------------------------------------------------------------------------|
