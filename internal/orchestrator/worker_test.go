@@ -116,6 +116,7 @@ type mockTrackerAdapter struct {
 	transitionCalls   []transitionIssueCall
 	commentIssueFn    func(ctx context.Context, issueID, text string) error
 	commentCalls      []commentIssueCall
+	fetchCommentsFn   func(ctx context.Context, issueID string) ([]domain.Comment, error)
 }
 
 var _ domain.TrackerAdapter = (*mockTrackerAdapter)(nil)
@@ -147,7 +148,10 @@ func (m *mockTrackerAdapter) FetchIssueStatesByIdentifiers(_ context.Context, _ 
 	return nil, nil
 }
 
-func (m *mockTrackerAdapter) FetchIssueComments(_ context.Context, _ string) ([]domain.Comment, error) {
+func (m *mockTrackerAdapter) FetchIssueComments(ctx context.Context, issueID string) ([]domain.Comment, error) {
+	if m.fetchCommentsFn != nil {
+		return m.fetchCommentsFn(ctx, issueID)
+	}
 	return nil, nil
 }
 
@@ -2539,6 +2543,8 @@ func TestRunWorkerAttempt_DispatchComment(t *testing.T) {
 		if tracker.commentCalls[0].Text == "" {
 			t.Error("CommentIssue Text is empty, want non-empty dispatch comment")
 		}
+		// Steering disabled here (cfg.Steering zero value): SelfMarker
+		// is empty so no marker is appended.
 
 		spy.mu.Lock()
 		comments := append([]trackerCommentCall(nil), spy.trackerComments...)
@@ -3126,4 +3132,363 @@ func TestRuntimeStatusSuffixInjection(t *testing.T) {
 			t.Errorf("first-turn prompt missing RuntimeStatusSuffix with empty template:\n%s", p)
 		}
 	})
+}
+
+func TestRunWorkerAttempt_SteeringIssueComments(t *testing.T) {
+	t.Parallel()
+
+	tmpl := `{{ range .new_comments }}<<{{ .author }}:{{ .body }}>>{{ end }}work {{ .issue.title }} t={{ .run.turn_number }}`
+
+	t.Run("disabled by default does not fetch comments", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 3
+
+		var fetchCount atomic.Int64
+		tracker := &mockTrackerAdapter{}
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			fetchCount.Add(1)
+			return nil, nil
+		}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       &mockAgentAdapter{},
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+		_ = ec.waitResult(t)
+
+		if got := fetchCount.Load(); got != 0 {
+			t.Errorf("FetchIssueComments call count = %d, want 0 (steering disabled)", got)
+		}
+	})
+
+	t.Run("delivers new comment on next turn", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 3
+		cfg.Steering = config.SteeringConfig{
+			IssueComments: config.IssueCommentsSteeringConfig{
+				Enabled:    true,
+				SelfMarker: config.DefaultSteeringSelfMarker,
+			},
+		}
+
+		tracker := &mockTrackerAdapter{}
+		var fetched atomic.Int64
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			n := fetched.Add(1)
+			if n == 1 {
+				return []domain.Comment{{ID: "c-new", Author: "alice", Body: "redirect please"}}, nil
+			}
+			return []domain.Comment{{ID: "c-new", Author: "alice", Body: "redirect please"}}, nil
+		}
+
+		var prompts []string
+		var mu sync.Mutex
+		agent := &mockAgentAdapter{
+			runTurnFn: func(_ context.Context, session domain.Session, params domain.RunTurnParams) (domain.TurnResult, error) {
+				mu.Lock()
+				prompts = append(prompts, params.Prompt)
+				mu.Unlock()
+				if params.OnEvent != nil {
+					params.OnEvent(domain.AgentEvent{Type: domain.EventNotification, Timestamp: time.Now().UTC()})
+				}
+				return domain.TurnResult{SessionID: session.ID, ExitReason: domain.EventTurnCompleted}, nil
+			},
+		}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       agent,
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+		_ = ec.waitResult(t)
+
+		mu.Lock()
+		defer mu.Unlock()
+		if len(prompts) < 2 {
+			t.Fatalf("got %d prompts, want >= 2", len(prompts))
+		}
+		// Turn 1: no steering content.
+		if strings.Contains(prompts[0], "<<alice:redirect please>>") {
+			t.Errorf("turn 1 prompt should not contain new comment, got:\n%s", prompts[0])
+		}
+		// Turn 2: new comment delivered.
+		if !strings.Contains(prompts[1], "<<alice:redirect please>>") {
+			t.Errorf("turn 2 prompt missing new comment, got:\n%s", prompts[1])
+		}
+		// Turn 3: same comment already seen, must not be re-delivered.
+		if len(prompts) >= 3 && strings.Contains(prompts[2], "<<alice:redirect please>>") {
+			t.Errorf("turn 3 prompt should not re-deliver seen comment, got:\n%s", prompts[2])
+		}
+	})
+
+	t.Run("seeds watermark from dispatch-time comments", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 2
+		cfg.Steering = config.SteeringConfig{
+			IssueComments: config.IssueCommentsSteeringConfig{Enabled: true},
+		}
+
+		tracker := &mockTrackerAdapter{}
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			return []domain.Comment{
+				{ID: "preexisting", Author: "u", Body: "old"},
+			}, nil
+		}
+
+		var prompts []string
+		var mu sync.Mutex
+		agent := &mockAgentAdapter{
+			runTurnFn: func(_ context.Context, session domain.Session, params domain.RunTurnParams) (domain.TurnResult, error) {
+				mu.Lock()
+				prompts = append(prompts, params.Prompt)
+				mu.Unlock()
+				if params.OnEvent != nil {
+					params.OnEvent(domain.AgentEvent{Type: domain.EventNotification, Timestamp: time.Now().UTC()})
+				}
+				return domain.TurnResult{SessionID: session.ID, ExitReason: domain.EventTurnCompleted}, nil
+			},
+		}
+
+		issue := workerTestIssue()
+		issue.Comments = []domain.Comment{{ID: "preexisting", Author: "u", Body: "old"}}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       agent,
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), issue, nil, deps)
+		_ = ec.waitResult(t)
+
+		mu.Lock()
+		defer mu.Unlock()
+		if len(prompts) < 2 {
+			t.Fatalf("got %d prompts, want >= 2", len(prompts))
+		}
+		if strings.Contains(prompts[1], "<<u:old>>") {
+			t.Errorf("turn 2 prompt re-delivered dispatch-time comment, got:\n%s", prompts[1])
+		}
+	})
+
+	t.Run("author filter drops bot comment", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 2
+		cfg.Steering = config.SteeringConfig{
+			IssueComments: config.IssueCommentsSteeringConfig{
+				Enabled:      true,
+				AuthorFilter: []string{"sortie-bot"},
+			},
+		}
+
+		tracker := &mockTrackerAdapter{}
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			return []domain.Comment{
+				{ID: "c1", Author: "Sortie-Bot", Body: "ack"},
+				{ID: "c2", Author: "alice", Body: "wanted"},
+			}, nil
+		}
+
+		var prompts []string
+		var mu sync.Mutex
+		agent := &mockAgentAdapter{
+			runTurnFn: func(_ context.Context, session domain.Session, params domain.RunTurnParams) (domain.TurnResult, error) {
+				mu.Lock()
+				prompts = append(prompts, params.Prompt)
+				mu.Unlock()
+				if params.OnEvent != nil {
+					params.OnEvent(domain.AgentEvent{Type: domain.EventNotification, Timestamp: time.Now().UTC()})
+				}
+				return domain.TurnResult{SessionID: session.ID, ExitReason: domain.EventTurnCompleted}, nil
+			},
+		}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       agent,
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+		_ = ec.waitResult(t)
+
+		mu.Lock()
+		defer mu.Unlock()
+		if len(prompts) < 2 {
+			t.Fatalf("got %d prompts, want >= 2", len(prompts))
+		}
+		if strings.Contains(prompts[1], "Sortie-Bot") {
+			t.Errorf("turn 2 prompt should drop bot comment, got:\n%s", prompts[1])
+		}
+		if !strings.Contains(prompts[1], "<<alice:wanted>>") {
+			t.Errorf("turn 2 prompt missing human comment, got:\n%s", prompts[1])
+		}
+	})
+
+	t.Run("self marker drops orchestrator-tagged comment", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 2
+		cfg.Steering = config.SteeringConfig{
+			IssueComments: config.IssueCommentsSteeringConfig{
+				Enabled:    true,
+				SelfMarker: config.DefaultSteeringSelfMarker,
+			},
+		}
+
+		tracker := &mockTrackerAdapter{}
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			return []domain.Comment{
+				{ID: "c1", Author: "alice", Body: "Sortie handoff " + config.DefaultSteeringSelfMarker},
+				{ID: "c2", Author: "bob", Body: "real comment"},
+			}, nil
+		}
+
+		var prompts []string
+		var mu sync.Mutex
+		agent := &mockAgentAdapter{
+			runTurnFn: func(_ context.Context, session domain.Session, params domain.RunTurnParams) (domain.TurnResult, error) {
+				mu.Lock()
+				prompts = append(prompts, params.Prompt)
+				mu.Unlock()
+				if params.OnEvent != nil {
+					params.OnEvent(domain.AgentEvent{Type: domain.EventNotification, Timestamp: time.Now().UTC()})
+				}
+				return domain.TurnResult{SessionID: session.ID, ExitReason: domain.EventTurnCompleted}, nil
+			},
+		}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       agent,
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+		_ = ec.waitResult(t)
+
+		mu.Lock()
+		defer mu.Unlock()
+		if len(prompts) < 2 {
+			t.Fatalf("got %d prompts, want >= 2", len(prompts))
+		}
+		if strings.Contains(prompts[1], "Sortie handoff") {
+			t.Errorf("turn 2 prompt should drop self-marked comment, got:\n%s", prompts[1])
+		}
+		if !strings.Contains(prompts[1], "<<bob:real comment>>") {
+			t.Errorf("turn 2 prompt missing real comment, got:\n%s", prompts[1])
+		}
+	})
+
+	t.Run("fetch error is non-fatal", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		cfg := defaultWorkerConfig(tmpDir)
+		cfg.Agent.MaxTurns = 2
+		cfg.Steering = config.SteeringConfig{
+			IssueComments: config.IssueCommentsSteeringConfig{Enabled: true},
+		}
+
+		tracker := &mockTrackerAdapter{}
+		tracker.fetchCommentsFn = func(_ context.Context, _ string) ([]domain.Comment, error) {
+			return nil, errors.New("tracker down")
+		}
+
+		ec := newExitCapture()
+		deps := WorkerDeps{
+			TrackerAdapter:     tracker,
+			AgentAdapter:       &mockAgentAdapter{},
+			ConfigFunc:         func() config.ServiceConfig { return cfg },
+			PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, tmpl) },
+			OnEvent:            func(_ string, _ domain.AgentEvent) {},
+			OnExit:             ec.onExit,
+			Logger:             discardLogger(),
+		}
+		RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+		result := ec.waitResult(t)
+
+		if result.ExitKind != WorkerExitNormal {
+			t.Errorf("ExitKind = %q, want %q", result.ExitKind, WorkerExitNormal)
+		}
+		if result.Error != nil {
+			t.Errorf("Error = %v, want nil (fetch error must not propagate)", result.Error)
+		}
+	})
+}
+
+func TestRunWorkerAttempt_DispatchCommentSelfMarker(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	cfg := defaultWorkerConfig(tmpDir)
+	cfg.Tracker.Comments.OnDispatch = true
+	cfg.Steering = config.SteeringConfig{
+		IssueComments: config.IssueCommentsSteeringConfig{
+			SelfMarker: config.DefaultSteeringSelfMarker,
+		},
+	}
+
+	tracker := &mockTrackerAdapter{}
+	ec := newExitCapture()
+
+	deps := WorkerDeps{
+		TrackerAdapter:     tracker,
+		AgentAdapter:       &mockAgentAdapter{},
+		ConfigFunc:         func() config.ServiceConfig { return cfg },
+		PromptTemplateFunc: func() *prompt.Template { return mustParseTemplate(t, "work on {{ .issue.title }}") },
+		OnEvent:            func(_ string, _ domain.AgentEvent) {},
+		OnExit:             ec.onExit,
+		Logger:             discardLogger(),
+	}
+
+	RunWorkerAttempt(context.Background(), workerTestIssue(), nil, deps)
+	ec.waitResult(t)
+
+	if len(tracker.commentCalls) != 1 {
+		t.Fatalf("CommentIssue call count = %d, want 1", len(tracker.commentCalls))
+	}
+	got := tracker.commentCalls[0].Text
+	if !strings.Contains(got, config.DefaultSteeringSelfMarker) {
+		t.Errorf("dispatch comment missing self-marker; got:\n%s", got)
+	}
 }

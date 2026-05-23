@@ -331,8 +331,8 @@ func TestAnalyzeTemplateNestedRangeAllWarnings(t *testing.T) {
 func TestTemplateFieldSchemaMatchesDomain(t *testing.T) {
 	t.Parallel()
 
-	// Verify templateFieldSchema has exactly the four expected top-level keys.
-	wantTopLevel := []string{"issue", "attempt", "run", "ci_failure"}
+	// Verify templateFieldSchema has exactly the five expected top-level keys.
+	wantTopLevel := []string{"issue", "attempt", "run", "ci_failure", "new_comments"}
 	if len(templateFieldSchema) != len(wantTopLevel) {
 		t.Errorf("templateFieldSchema has %d top-level keys, want %d (%v)",
 			len(templateFieldSchema), len(wantTopLevel), wantTopLevel)

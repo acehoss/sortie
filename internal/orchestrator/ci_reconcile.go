@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sortie-ai/sortie/internal/domain"
+	"github.com/sortie-ai/sortie/internal/issuekit"
 	"github.com/sortie-ai/sortie/internal/logging"
 	"github.com/sortie-ai/sortie/internal/persistence"
 )
@@ -308,7 +309,7 @@ func escalateCIFailure(
 			tracker := params.TrackerAdapter
 			m := metrics
 			escalLog := log
-			ct := commentText
+			ct := issuekit.MarkSelfComment(commentText, params.Steering.IssueComments.SelfMarker)
 			escalAction := params.CIFeedback.Escalation
 			if escalAction == "" {
 				escalAction = "comment"

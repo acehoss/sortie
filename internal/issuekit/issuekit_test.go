@@ -2,7 +2,10 @@ package issuekit
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/sortie-ai/sortie/internal/domain"
 )
 
 func TestNormalizeLabels_nil(t *testing.T) {
@@ -231,4 +234,162 @@ func TestNormalizeComments_order(t *testing.T) {
 	if got[1].ID != "2" || got[1].Author != "Bob" || got[1].Body != "second" || got[1].CreatedAt != "2025-01-02" {
 		t.Errorf("NormalizeComments[1] = %+v, want {ID:2 Author:Bob Body:second CreatedAt:2025-01-02}", got[1])
 	}
+}
+
+func TestMarkSelfComment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		text   string
+		marker string
+		want   string
+	}{
+		{
+			name:   "appends marker on its own line",
+			text:   "hello",
+			marker: "<!-- m -->",
+			want:   "hello\n\n<!-- m -->",
+		},
+		{
+			name:   "appends marker after trailing newline",
+			text:   "hello\n",
+			marker: "<!-- m -->",
+			want:   "hello\n<!-- m -->",
+		},
+		{
+			name:   "does not duplicate marker already present",
+			text:   "hello <!-- m -->",
+			marker: "<!-- m -->",
+			want:   "hello <!-- m -->",
+		},
+		{
+			name:   "empty marker leaves text unchanged",
+			text:   "hello",
+			marker: "",
+			want:   "hello",
+		},
+		{
+			name:   "empty text returns empty",
+			text:   "",
+			marker: "<!-- m -->",
+			want:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := MarkSelfComment(tt.text, tt.marker)
+			if got != tt.want {
+				t.Errorf("MarkSelfComment(%q, %q) = %q, want %q", tt.text, tt.marker, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterSteeringComments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil input returns nil", func(t *testing.T) {
+		t.Parallel()
+		if got := FilterSteeringComments(nil, nil, nil, ""); got != nil {
+			t.Errorf("FilterSteeringComments(nil) = %v, want nil", got)
+		}
+	})
+
+	t.Run("drops comments by seen id", func(t *testing.T) {
+		t.Parallel()
+		in := []domain.Comment{
+			{ID: "c1", Author: "a", Body: "old"},
+			{ID: "c2", Author: "b", Body: "new"},
+		}
+		seen := map[string]bool{"c1": true}
+		got := FilterSteeringComments(in, seen, nil, "")
+		if len(got) != 1 || got[0].ID != "c2" {
+			t.Errorf("FilterSteeringComments = %+v, want [c2]", got)
+		}
+	})
+
+	t.Run("drops comments by author filter case-insensitive", func(t *testing.T) {
+		t.Parallel()
+		in := []domain.Comment{
+			{ID: "c1", Author: "Sortie-Bot", Body: "robot"},
+			{ID: "c2", Author: "human", Body: "human"},
+		}
+		got := FilterSteeringComments(in, nil, []string{"sortie-bot"}, "")
+		if len(got) != 1 || got[0].ID != "c2" {
+			t.Errorf("FilterSteeringComments = %+v, want [c2]", got)
+		}
+	})
+
+	t.Run("drops comments containing self marker", func(t *testing.T) {
+		t.Parallel()
+		in := []domain.Comment{
+			{ID: "c1", Author: "a", Body: "Sortie handoff <!-- sortie:no-steer -->"},
+			{ID: "c2", Author: "b", Body: "human comment"},
+		}
+		got := FilterSteeringComments(in, nil, nil, "<!-- sortie:no-steer -->")
+		if len(got) != 1 || got[0].ID != "c2" {
+			t.Errorf("FilterSteeringComments = %+v, want [c2]", got)
+		}
+	})
+
+	t.Run("empty marker disables marker filter", func(t *testing.T) {
+		t.Parallel()
+		marker := "<!-- m -->"
+		in := []domain.Comment{
+			{ID: "c1", Author: "a", Body: "x " + marker},
+		}
+		got := FilterSteeringComments(in, nil, nil, "")
+		if len(got) != 1 {
+			t.Errorf("FilterSteeringComments with empty marker = %+v, want all kept", got)
+		}
+	})
+
+	t.Run("combined filters apply", func(t *testing.T) {
+		t.Parallel()
+		in := []domain.Comment{
+			{ID: "c1", Author: "a", Body: "old"},
+			{ID: "c2", Author: "bot", Body: "from bot"},
+			{ID: "c3", Author: "a", Body: "tagged <!-- m -->"},
+			{ID: "c4", Author: "a", Body: "wanted"},
+		}
+		got := FilterSteeringComments(
+			in,
+			map[string]bool{"c1": true},
+			[]string{"bot"},
+			"<!-- m -->",
+		)
+		if len(got) != 1 || got[0].ID != "c4" {
+			t.Errorf("FilterSteeringComments = %+v, want [c4]", got)
+		}
+	})
+
+	t.Run("marker substring rather than exact match", func(t *testing.T) {
+		t.Parallel()
+		in := []domain.Comment{
+			{ID: "c1", Author: "a", Body: "prefix " + strings.Repeat("x", 20) + " <!-- m --> suffix"},
+		}
+		got := FilterSteeringComments(in, nil, nil, "<!-- m -->")
+		if len(got) != 0 {
+			t.Errorf("FilterSteeringComments = %+v, want []", got)
+		}
+	})
+
+	t.Run("empty IDs are dropped", func(t *testing.T) {
+		t.Parallel()
+		// An empty ID cannot be tracked by the watermark, so the comment
+		// would be re-delivered every turn. Drop it defensively rather
+		// than spamming the agent.
+		in := []domain.Comment{
+			{ID: "", Author: "alice", Body: "untracked"},
+			{ID: "c1", Author: "alice", Body: "tracked"},
+		}
+		got := FilterSteeringComments(in, nil, nil, "")
+		if len(got) != 1 || got[0].ID != "c1" {
+			t.Errorf("FilterSteeringComments = %+v, want [c1]", got)
+		}
+	})
 }

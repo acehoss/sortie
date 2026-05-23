@@ -24,6 +24,7 @@
   - [2.8 `ci_feedback` — CI Feedback Loop (deprecated)](#28-ci_feedback--ci-feedback-loop-deprecated)
   - [2.9 `self_review` — Self-Review Configuration](#29-self_review--self-review-configuration)
   - [2.10 `reactions` — Reaction-Based Feedback Loops](#210-reactions--reaction-based-feedback-loops)
+  - [2.11 `steering` — Mid-Run Input Sources](#211-steering--mid-run-input-sources)
 - [3. Environment Variable Overrides](#3-environment-variable-overrides)
   - [3.1 Source Precedence](#31-source-precedence)
   - [3.2 Curated Variable List](#32-curated-variable-list)
@@ -140,7 +141,7 @@ After parsing, the loader produces a struct with three fields:
 
 ### 2.1 Top-Level Keys
 
-The core schema recognizes nine top-level keys:
+The core schema recognizes ten top-level keys:
 
 ```yaml
 tracker: # Issue tracker connection and query settings
@@ -151,6 +152,7 @@ agent: # Coding agent adapter, timeouts, and limits
 db_path: # SQLite database file path
 ci_feedback: # CI failure feedback loop (deprecated; use reactions.ci_failure)
 reactions: # Reaction-based feedback loops (CI failure, review comments)
+steering: # Mid-run input sources (issue-comment steering)
 self_review: # Self-review verification loop (optional)
 ```
 
@@ -621,6 +623,57 @@ reactions:
 - `debounce_ms` must be non-negative for `review_comments`.
 - `max_continuation_turns` must be positive for `review_comments`.
 - When `provider` is absent or empty, all other fields in the kind sub-object are ignored.
+
+---
+
+### 2.11 `steering` — Mid-Run Input Sources
+
+The `steering` section configures input channels that deliver content into the **active**
+worker session between turns. This is distinct from `reactions`, which schedule fresh
+dispatches after a worker run completes. The only steering source in v1 is
+`issue_comments`.
+
+```yaml
+steering:
+  issue_comments:
+    enabled: true                          # default false
+    author_filter:                         # optional; usernames to ignore
+      - sortie-bot
+      - github-actions[bot]
+    self_marker: "<!-- sortie:no-steer -->"  # optional; default shown
+```
+
+When `issue_comments.enabled` is `true`, the worker calls
+`TrackerAdapter.FetchIssueComments` once between each turn (immediately after the existing
+state refresh). Comments that arrived since dispatch and have not already been seen are
+rendered into the next turn's prompt via the `.new_comments` template variable.
+
+**Echo prevention.** Every orchestrator-authored tracker comment (dispatch acknowledgements,
+completion/failure summaries, CI-failure escalations, review-failure escalations) is wrapped
+with the configured `self_marker` substring (an invisible HTML comment by default). Comments
+whose body contains the marker are dropped during the steering read. Operators can also list
+author names in `author_filter` (case-insensitive exact match) to drop comments from known
+bot identities.
+
+**Watermark.** The set of "already seen" comment IDs is per-worker-run and in-memory. It is
+seeded from `issue.Comments` at dispatch, so comments present at the start of the run are
+never delivered as steering. The watermark is not persisted; if the orchestrator restarts
+mid-run, the next dispatch's static comment snapshot covers the gap.
+
+**Failure isolation.** Errors from `FetchIssueComments` between turns are logged at WARN
+and ignored. The next turn proceeds without new comments.
+
+**Validation rules:**
+
+- `enabled` must be a boolean.
+- `author_filter` must be a list of strings.
+- `self_marker` must be a string. Empty string disables the marker filter (the author
+  filter alone remains in effect).
+
+The `.new_comments` template variable is always defined (nil when no new comments are
+pending) so referencing it in a workflow that uses `{{ if .new_comments }}` does not trip
+the strict `missingkey=error` policy. See [Section 5](#5-prompt-template-reference) for
+template variable details.
 
 ---
 
@@ -1462,8 +1515,10 @@ template.New("prompt").
 ### 5.2 Template Input Variables
 
 The data map passed to `Execute` contains **three core top-level keys** (`issue`, `attempt`,
-`run`) plus **continuation context keys** (`ci_failure`, `review_comments`) that are `nil` by
-default and populated on reaction-triggered dispatches:
+`run`), **continuation context keys** (`ci_failure`, `review_comments`) that are `nil` by
+default and populated on reaction-triggered dispatches, and a **steering key**
+(`new_comments`) that is `nil` by default and populated between turns when
+`steering.issue_comments.enabled` is true:
 
 #### `issue` — Normalized Issue Object
 
@@ -1551,6 +1606,38 @@ The following review comments were left on the PR. Address each one:
 
 {{ range .review_comments }}
 ### {{ .reviewer }} on {{ .file }}{{ if .start_line }} (line {{ .start_line }}{{ if .end_line }}-{{ .end_line }}{{ end }}){{ end }}
+
+{{ .body }}
+
+{{ end }}
+{{ end }}
+```
+
+#### `new_comments` — Between-Turn Steering Comments (steering key)
+
+Non-nil between turns of the same worker run when
+`steering.issue_comments.enabled` is true and the tracker reports new
+comments since dispatch. Filtered through `steering.issue_comments.author_filter`
+and `steering.issue_comments.self_marker` (see Section 2.11).
+
+| Field (per element)         | Type    | Description                                              |
+| --------------------------- | ------- | -------------------------------------------------------- |
+| `.new_comments[].id`        | string  | Tracker-internal comment identifier.                     |
+| `.new_comments[].author`    | string  | Display name or username of the author.                  |
+| `.new_comments[].body`      | string  | Comment text content.                                    |
+| `.new_comments[].created_at`| string  | ISO-8601 creation timestamp.                             |
+
+When `nil` (default on turn 1 and on turns where no new comments arrived),
+`{{ if .new_comments }}` evaluates to `false`.
+
+**Template pattern for steering comments:**
+
+```
+{{ if .new_comments }}
+## New comments since last turn
+
+{{ range .new_comments }}
+### {{ .author }} at {{ .created_at }}
 
 {{ .body }}
 

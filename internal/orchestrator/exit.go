@@ -11,6 +11,7 @@ import (
 
 	"github.com/sortie-ai/sortie/internal/config"
 	"github.com/sortie-ai/sortie/internal/domain"
+	"github.com/sortie-ai/sortie/internal/issuekit"
 	"github.com/sortie-ai/sortie/internal/logging"
 	"github.com/sortie-ai/sortie/internal/persistence"
 	"github.com/sortie-ai/sortie/internal/workspace"
@@ -98,6 +99,12 @@ type HandleWorkerExitParams struct {
 	// completion and failure. Read from config.Tracker.Comments by the
 	// event loop caller.
 	CommentsConfig config.TrackerCommentsConfig
+
+	// Steering holds steering-source configuration. Only the
+	// IssueComments.SelfMarker is consulted here, to wrap
+	// orchestrator-authored comments so they are not re-injected by
+	// the worker's between-turn comment poll.
+	Steering config.SteeringConfig
 
 	// HostPool is the SSH host pool for releasing hosts on worker exit.
 	// If nil, no host pool release occurs (local-mode or tests).
@@ -587,7 +594,7 @@ func HandleWorkerExit(state *State, workerResult WorkerResult, params HandleWork
 		m := metrics
 		commentLog := log
 		lc := lifecycle
-		ct := commentText
+		ct := issuekit.MarkSelfComment(commentText, params.Steering.IssueComments.SelfMarker)
 
 		state.TrackerOpsWg.Add(1)
 		go func() {

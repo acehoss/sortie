@@ -120,6 +120,31 @@ type Comment struct {
 	CreatedAt string
 }
 
+// CommentsToTemplate converts a slice of comments to the snake_case
+// map shape used by prompt templates. Returns nil for nil input to
+// preserve the nil-vs-empty distinction documented on Issue.Comments
+// ("nil = not fetched, empty non-nil = no comments exist"); for a
+// non-nil but empty slice it returns an empty non-nil slice.
+//
+// Shared by Issue.ToTemplateMap (for .issue.comments) and the
+// orchestrator's between-turn steering pipeline (for .new_comments)
+// so both render with identical field shape.
+func CommentsToTemplate(in []Comment) []map[string]any {
+	if in == nil {
+		return nil
+	}
+	out := make([]map[string]any, len(in))
+	for i, c := range in {
+		out[i] = map[string]any{
+			"id":         c.ID,
+			"author":     c.Author,
+			"body":       c.Body,
+			"created_at": c.CreatedAt,
+		}
+	}
+	return out
+}
+
 // ToTemplateMap converts the Issue to a map[string]any with snake_case
 // keys suitable for prompt template rendering as the "issue" variable.
 func (iss *Issue) ToTemplateMap() map[string]any {
@@ -138,16 +163,7 @@ func (iss *Issue) ToTemplateMap() map[string]any {
 
 	var comments any
 	if iss.Comments != nil {
-		cm := make([]map[string]any, len(iss.Comments))
-		for i, c := range iss.Comments {
-			cm[i] = map[string]any{
-				"id":         c.ID,
-				"author":     c.Author,
-				"body":       c.Body,
-				"created_at": c.CreatedAt,
-			}
-		}
-		comments = cm
+		comments = CommentsToTemplate(iss.Comments)
 	}
 
 	blockedBy := make([]map[string]any, len(iss.BlockedBy))

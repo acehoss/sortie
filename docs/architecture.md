@@ -1684,11 +1684,20 @@ Behavior:
 2. Build prompt from workflow template.
 3. Start agent session via adapter.
 4. Relay agent events to orchestrator.
-5. On any error, fail the worker attempt (the orchestrator will retry).
+5. Between turns, refresh tracker state and (when
+   `steering.issue_comments.enabled` is true) poll new tracker comments
+   for delivery on the next turn via the prompt template's
+   `.new_comments` variable. The poll is advisory: errors are logged
+   and do not fail the worker. The watermark of already-seen comments
+   is per-run and in-memory.
+6. On any error, fail the worker attempt (the orchestrator will retry).
 
 Note:
 
 - Workspaces are intentionally preserved after successful runs.
+- Mid-turn input injection into a running `RunTurn` call is explicitly
+  out of scope of the adapter contract. Between-turn delivery is the
+  supported steering mechanism in v1.
 
 ### 10.7 Local Subprocess Launch Contract
 
@@ -2223,6 +2232,23 @@ Review comment context is injected only on turn 1 of a review-fix dispatch, foll
 `{{ if .review_comments }}...{{ end }}`. When `review_comments` is nil, the template variable is
 still present in the data map (set to nil) so strict `missingkey=error` evaluation does not
 reject templates that reference the field.
+
+- `new_comments` (list of maps or nil): between-turn steering comments injected on every turn
+  (except turn 1) when `steering.issue_comments.enabled` is true and the tracker reports
+  comments that arrived after dispatch and were not already seen by the watermark. Each element:
+  - `id`: tracker-internal comment identifier
+  - `author`: display name or username of the author
+  - `body`: comment text
+  - `created_at`: ISO-8601 creation timestamp
+
+The worker polls `TrackerAdapter.FetchIssueComments` once between each turn (immediately after
+the existing state refresh), filters the result through the in-memory ID watermark, the
+configured author filter, and the self-marker substring, and passes survivors to
+`prompt.WithNewComments`. Fetch errors are advisory: the worker logs WARN and proceeds with no
+new comments. When `new_comments` is nil, the template variable is still present in the data
+map (set to nil) so strict `missingkey=error` evaluation does not reject templates that
+reference the field. This source is distinct from `ContinuationContext`: it does not start a
+new run and it can fire on any turn ≥ 2.
 
 ### 12.2 Rendering Rules
 

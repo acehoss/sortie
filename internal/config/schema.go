@@ -114,6 +114,15 @@ var knownFieldsRegistry = map[string]SectionSchema{
 		Fields:           []FieldDef{},
 		AllowDynamicKeys: true,
 	},
+	"steering": {
+		Fields: []FieldDef{
+			{Name: "issue_comments", Type: FieldMap, Nested: []FieldDef{
+				{Name: "enabled", Type: FieldBool},
+				{Name: "author_filter", Type: FieldStringList},
+				{Name: "self_marker", Type: FieldString},
+			}},
+		},
+	},
 }
 
 // staticKnownExtensionKeys lists extension top-level keys defined by
