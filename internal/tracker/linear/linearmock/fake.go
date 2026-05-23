@@ -131,7 +131,10 @@ func (f *Fake) QueryIssues(ctx context.Context, filter linear.IssuesFilter, firs
 		matching = append(matching, deepCopyIssue(iss, false))
 	}
 	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].CreatedAt < matching[j].CreatedAt
+		if matching[i].CreatedAt != matching[j].CreatedAt {
+			return matching[i].CreatedAt < matching[j].CreatedAt
+		}
+		return matching[i].ID < matching[j].ID
 	})
 
 	startIdx := 0
