@@ -19,7 +19,7 @@
 
 </div>
 
-Sortie 假定你的编程智能体在手动运行时已经能够产出有价值的成果。它围绕智能体处理并行调度、隔离工作区、带重试的持久化状态、CI 反馈、评审意见和成本追踪。Sortie 不会提升智能体本身的输出质量。
+Sortie 假定你的编程智能体在手动运行时已经能够产出有价值的成果。它围绕智能体处理并行调度、隔离工作区、带重试的持久化状态、CI 反馈、评审意见、轮次间评论引导和成本追踪。Sortie 不会提升智能体本身的输出质量。
 
 ## 安装
 
@@ -72,7 +72,7 @@ Sortie 是一个单一 Go 二进制文件。它使用 SQLite 存储持久化状�
 
 工单系统和编程智能体通过适配器接口集成。为新的工单系统或智能体添加支持是一种增量变更：在新包中实现对应接口即可。
 
-已支持的工单系统：GitHub Issues 和 Jira。已支持的智能体：Claude Code、Copilot 和 Codex。技术选型的详细依据参见 [`docs/decisions/`](docs/decisions/)。
+已支持的工单系统：GitHub Issues、Jira 和 Linear。已支持的智能体：Claude Code、Copilot、OpenCode 和 Codex。技术选型的详细依据参见 [`docs/decisions/`](docs/decisions/)。
 
 ## 文档
 
