@@ -654,7 +654,7 @@ func RunWorkerAttempt(ctx context.Context, issue domain.Issue, attempt *int, dep
 			}
 		}
 		if len(pendingSteering) > 0 {
-			renderOpts = append(renderOpts, prompt.WithNewComments(commentsToTemplate(pendingSteering)))
+			renderOpts = append(renderOpts, prompt.WithNewComments(domain.CommentsToTemplate(pendingSteering)))
 			pendingSteering = nil
 		}
 		rendered, err := prompt.BuildTurnPrompt(tmpl, issueMap, attemptInt, turnNumber, maxTurns, renderOpts...)
@@ -981,21 +981,3 @@ func buildDispatchComment(agentKind string, attempt int) string {
 	return fmt.Sprintf("Sortie session started.\nSession: pending\nAgent: %s\nWorkspace: pending\nAttempt: %d", agentKind, attempt)
 }
 
-// commentsToTemplate converts domain comments into the snake_case map
-// shape exposed to prompt templates as .new_comments. Mirrors the
-// shape of .issue.comments entries produced by domain.Issue.ToTemplateMap.
-func commentsToTemplate(in []domain.Comment) []map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, len(in))
-	for i, c := range in {
-		out[i] = map[string]any{
-			"id":         c.ID,
-			"author":     c.Author,
-			"body":       c.Body,
-			"created_at": c.CreatedAt,
-		}
-	}
-	return out
-}
