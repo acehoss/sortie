@@ -542,3 +542,90 @@ func TestValidateFrontMatterReactions(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateFrontMatterSteering(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		raw        map[string]any
+		wantCount  int
+		wantChecks []string
+		wantFields []string
+	}{
+		{
+			name: "known sub-keys produce no warnings",
+			raw: map[string]any{
+				"steering": map[string]any{
+					"issue_comments": map[string]any{
+						"enabled":       true,
+						"author_filter": []any{"bot"},
+						"self_marker":   "<!-- m -->",
+					},
+				},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "unknown sub-key under steering emits warning",
+			raw: map[string]any{
+				"steering": map[string]any{
+					"issue_comments": map[string]any{"enabled": true},
+					"typo_section":   map[string]any{},
+				},
+			},
+			wantCount:  1,
+			wantChecks: []string{"unknown_sub_key"},
+			wantFields: []string{"steering.typo_section"},
+		},
+		{
+			name: "unknown sub-key under steering.issue_comments emits warning",
+			raw: map[string]any{
+				"steering": map[string]any{
+					"issue_comments": map[string]any{
+						"enabled":       true,
+						"unknown_field": "x",
+					},
+				},
+			},
+			wantCount:  1,
+			wantChecks: []string{"unknown_sub_key"},
+			wantFields: []string{"steering.issue_comments.unknown_field"},
+		},
+		{
+			name: "type mismatch on enabled emits warning",
+			raw: map[string]any{
+				"steering": map[string]any{
+					"issue_comments": map[string]any{
+						"enabled": "yes",
+					},
+				},
+			},
+			wantCount:  1,
+			wantChecks: []string{"type_mismatch"},
+			wantFields: []string{"steering.issue_comments.enabled"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ValidateFrontMatter(tt.raw, ServiceConfig{})
+
+			if len(got) != tt.wantCount {
+				t.Fatalf("ValidateFrontMatter() returned %d warnings, want %d\nwarnings: %+v", len(got), tt.wantCount, got)
+			}
+			for i, wantCheck := range tt.wantChecks {
+				if got[i].Check != wantCheck {
+					t.Errorf("warnings[%d].Check = %q, want %q", i, got[i].Check, wantCheck)
+				}
+			}
+			for i, wantField := range tt.wantFields {
+				if got[i].Field != wantField {
+					t.Errorf("warnings[%d].Field = %q, want %q", i, got[i].Field, wantField)
+				}
+			}
+		})
+	}
+}

@@ -117,8 +117,14 @@ func Parse(body, source string, frontMatterLines int) (*Template, error) {
 
 // RenderOption applies optional overrides to the template data map
 // before execution. Use [WithContinuationContext] to inject reaction
-// continuation data.
+// continuation data; use [WithNewComments] to inject between-turn
+// steering comments.
 type RenderOption func(m map[string]any)
+
+// NewCommentsKey is the template variable name carrying between-turn
+// steering comments. Always populated on render (defaults to nil) so
+// templates that reference .new_comments do not trip missingkey=error.
+const NewCommentsKey = "new_comments"
 
 // continuationKeys lists all template variable names reserved for
 // reaction continuation context. Each key receives a nil default in
@@ -155,12 +161,27 @@ func WithContinuationContext(data map[string]any) RenderOption {
 	}
 }
 
+// WithNewComments returns a [RenderOption] that sets the
+// [NewCommentsKey] template variable to the supplied list. Each entry
+// is rendered as a map with snake_case keys (id, author, body,
+// created_at) matching the shape used by issue.comments. Pass nil or
+// an empty list to leave the variable at its nil default.
+func WithNewComments(comments []map[string]any) RenderOption {
+	if len(comments) == 0 {
+		return func(map[string]any) {}
+	}
+	return func(m map[string]any) {
+		m[NewCommentsKey] = comments
+	}
+}
+
 // Render executes the template with the given inputs and returns the
 // rendered prompt string. The data map contains the top-level keys
-// "issue", "attempt", and "run", plus every key in [continuationKeys]
-// (currently "ci_failure", "review_comments"). Continuation keys default
-// to nil when no [RenderOption] overrides them, ensuring missingkey=error
-// does not reject templates that reference these fields.
+// "issue", "attempt", and "run", every key in [continuationKeys]
+// (currently "ci_failure", "review_comments"), and [NewCommentsKey].
+// Continuation keys and new_comments default to nil when no
+// [RenderOption] overrides them, ensuring missingkey=error does not
+// reject templates that reference these fields.
 // Returns a [*TemplateError] with Kind [ErrTemplateRender] on failure,
 // with line numbers adjusted to WORKFLOW.md-relative positions.
 func (t *Template) Render(issue map[string]any, attempt any, run RunContext, opts ...RenderOption) (string, error) {
@@ -172,6 +193,7 @@ func (t *Template) Render(issue map[string]any, attempt any, run RunContext, opt
 	for _, k := range continuationKeys {
 		templateVars[k] = nil
 	}
+	templateVars[NewCommentsKey] = nil
 
 	for _, opt := range opts {
 		opt(templateVars)

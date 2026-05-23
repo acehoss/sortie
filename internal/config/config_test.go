@@ -1935,3 +1935,136 @@ func TestCIFailureMigration(t *testing.T) {
 		assertStringEqual(t, "Reactions[review_comments].Provider", "github", rc.Provider)
 	})
 }
+
+func TestNewServiceConfig_Steering(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Absent/Defaults", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewServiceConfig(map[string]any{})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Steering.IssueComments.Enabled {
+			t.Error("IssueComments.Enabled = true, want false default")
+		}
+		if cfg.Steering.IssueComments.SelfMarker != "" {
+			t.Errorf("IssueComments.SelfMarker = %q, want empty (absent section)", cfg.Steering.IssueComments.SelfMarker)
+		}
+	})
+
+	t.Run("EnabledTrue/AppliesDefaultMarker", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"enabled": true,
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.Steering.IssueComments.Enabled {
+			t.Error("IssueComments.Enabled = false, want true")
+		}
+		if cfg.Steering.IssueComments.SelfMarker != DefaultSteeringSelfMarker {
+			t.Errorf("IssueComments.SelfMarker = %q, want %q", cfg.Steering.IssueComments.SelfMarker, DefaultSteeringSelfMarker)
+		}
+	})
+
+	t.Run("AuthorFilterParsed", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"enabled":       true,
+					"author_filter": []any{"sortie-bot", "github-actions[bot]"},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := cfg.Steering.IssueComments.AuthorFilter; len(got) != 2 || got[0] != "sortie-bot" || got[1] != "github-actions[bot]" {
+			t.Errorf("IssueComments.AuthorFilter = %v, want [sortie-bot github-actions[bot]]", got)
+		}
+	})
+
+	t.Run("SelfMarkerOverride", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"enabled":     true,
+					"self_marker": "[[sortie]]",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Steering.IssueComments.SelfMarker != "[[sortie]]" {
+			t.Errorf("IssueComments.SelfMarker = %q, want %q", cfg.Steering.IssueComments.SelfMarker, "[[sortie]]")
+		}
+	})
+
+	t.Run("EnabledNotBool/Error", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"enabled": "yes",
+				},
+			},
+		})
+		assertConfigErrorField(t, err, "steering.issue_comments.enabled")
+	})
+
+	t.Run("AuthorFilterNotList/Error", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"enabled":       true,
+					"author_filter": "bot",
+				},
+			},
+		})
+		assertConfigErrorField(t, err, "steering.issue_comments.author_filter")
+	})
+
+	t.Run("AuthorFilterElementNotString/Error", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"author_filter": []any{"ok", 42},
+				},
+			},
+		})
+		assertConfigErrorField(t, err, "steering.issue_comments.author_filter[1]")
+	})
+
+	t.Run("SelfMarkerNotString/Error", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": map[string]any{
+					"self_marker": 123,
+				},
+			},
+		})
+		assertConfigErrorField(t, err, "steering.issue_comments.self_marker")
+	})
+
+	t.Run("IssueCommentsNotMap/Error", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewServiceConfig(map[string]any{
+			"steering": map[string]any{
+				"issue_comments": "yes",
+			},
+		})
+		assertConfigErrorField(t, err, "steering.issue_comments")
+	})
+}

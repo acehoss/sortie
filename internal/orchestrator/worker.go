@@ -14,6 +14,7 @@ import (
 
 	"github.com/sortie-ai/sortie/internal/config"
 	"github.com/sortie-ai/sortie/internal/domain"
+	"github.com/sortie-ai/sortie/internal/issuekit"
 	"github.com/sortie-ai/sortie/internal/logging"
 	"github.com/sortie-ai/sortie/internal/prompt"
 	"github.com/sortie-ai/sortie/internal/workspace"
@@ -347,7 +348,7 @@ func RunWorkerAttempt(ctx context.Context, issue domain.Issue, attempt *int, dep
 	// Fires after in-progress transition, before workspace preparation.
 	// Failure is non-fatal — the worker continues regardless.
 	if cfg.Tracker.Comments.OnDispatch {
-		text := buildDispatchComment(cfg.Agent.Kind, attemptInt)
+		text := issuekit.MarkSelfComment(buildDispatchComment(cfg.Agent.Kind, attemptInt), cfg.Steering.IssueComments.SelfMarker)
 		if err := deps.TrackerAdapter.CommentIssue(ctx, issue.ID, text); err != nil {
 			logger.Warn("dispatch comment failed", slog.Any("error", err))
 			deps.Metrics.IncTrackerComments("dispatch", "error")
@@ -598,6 +599,18 @@ func RunWorkerAttempt(ctx context.Context, issue domain.Issue, attempt *int, dep
 	turnNumber := 1
 	activeStates := cfg.Tracker.ActiveStates
 
+	// Seed the steering watermark from comments present at dispatch so
+	// they are never re-delivered as "new." pendingSteering accumulates
+	// between-turn fetched comments awaiting injection into the next
+	// turn's prompt; it is consumed once per turn.
+	steeringSeen := make(map[string]bool, len(issue.Comments))
+	for _, c := range issue.Comments {
+		if c.ID != "" {
+			steeringSeen[c.ID] = true
+		}
+	}
+	var pendingSteering []domain.Comment
+
 	if mcpConfigPath != "" {
 		if err := writeWorkerState(wsResult.Path, workerState{
 			TurnNumber: 0,
@@ -639,6 +652,10 @@ func RunWorkerAttempt(ctx context.Context, issue domain.Issue, attempt *int, dep
 			if contCtx != nil {
 				renderOpts = append(renderOpts, prompt.WithContinuationContext(contCtx))
 			}
+		}
+		if len(pendingSteering) > 0 {
+			renderOpts = append(renderOpts, prompt.WithNewComments(commentsToTemplate(pendingSteering)))
+			pendingSteering = nil
 		}
 		rendered, err := prompt.BuildTurnPrompt(tmpl, issueMap, attemptInt, turnNumber, maxTurns, renderOpts...)
 		if err != nil {
@@ -821,6 +838,37 @@ func RunWorkerAttempt(ctx context.Context, issue domain.Issue, attempt *int, dep
 			break
 		}
 
+		// Between-turn steering poll. Opt-in via
+		// steering.issue_comments.enabled. Errors are advisory: log
+		// and proceed without new comments.
+		if cfg.Steering.IssueComments.Enabled {
+			fetched, fetchErr := deps.TrackerAdapter.FetchIssueComments(ctx, issue.ID)
+			if fetchErr != nil {
+				logger.Warn("steering comment fetch failed",
+					slog.Int("turn_number", turnNumber),
+					slog.Any("error", fetchErr),
+				)
+			} else {
+				newComments := issuekit.FilterSteeringComments(
+					fetched,
+					steeringSeen,
+					cfg.Steering.IssueComments.AuthorFilter,
+					cfg.Steering.IssueComments.SelfMarker,
+				)
+				for _, c := range fetched {
+					if c.ID != "" {
+						steeringSeen[c.ID] = true
+					}
+				}
+				if len(newComments) > 0 {
+					pendingSteering = append(pendingSteering, newComments...)
+					logger.Info("steering comments queued for next turn",
+						slog.Int("count", len(newComments)),
+					)
+				}
+			}
+		}
+
 		turnNumber++
 	}
 
@@ -931,4 +979,23 @@ func buildToolAdvertisement(reg *domain.ToolRegistry, project string) string {
 // dispatch event.
 func buildDispatchComment(agentKind string, attempt int) string {
 	return fmt.Sprintf("Sortie session started.\nSession: pending\nAgent: %s\nWorkspace: pending\nAttempt: %d", agentKind, attempt)
+}
+
+// commentsToTemplate converts domain comments into the snake_case map
+// shape exposed to prompt templates as .new_comments. Mirrors the
+// shape of .issue.comments entries produced by domain.Issue.ToTemplateMap.
+func commentsToTemplate(in []domain.Comment) []map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, len(in))
+	for i, c := range in {
+		out[i] = map[string]any{
+			"id":         c.ID,
+			"author":     c.Author,
+			"body":       c.Body,
+			"created_at": c.CreatedAt,
+		}
+	}
+	return out
 }

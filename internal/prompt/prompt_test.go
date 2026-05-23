@@ -576,3 +576,76 @@ func TestRender_WithContinuationContext(t *testing.T) {
 		}
 	})
 }
+
+func TestRender_NewCommentsDefaultNil(t *testing.T) {
+	t.Parallel()
+
+	// Templates that reference .new_comments must not error when no
+	// option was passed (missingkey=error is enforced globally).
+	tmpl, err := Parse(
+		`{{ if .new_comments }}has{{ else }}none{{ end }}`,
+		"WORKFLOW.md", 0,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	got, err := tmpl.Render(
+		map[string]any{"title": "t"}, nil,
+		RunContext{TurnNumber: 1, MaxTurns: 5},
+	)
+	if err != nil {
+		t.Fatalf("render without new_comments: %v", err)
+	}
+	if got != "none" {
+		t.Errorf("render = %q, want %q", got, "none")
+	}
+}
+
+func TestWithNewComments_Render(t *testing.T) {
+	t.Parallel()
+
+	tmpl, err := Parse(
+		`{{- range .new_comments }}{{ .author }}:{{ .body }};{{ end -}}`,
+		"WORKFLOW.md", 0,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	got, err := tmpl.Render(
+		map[string]any{"title": "t"}, nil,
+		RunContext{TurnNumber: 2, MaxTurns: 5},
+		WithNewComments([]map[string]any{
+			{"id": "c1", "author": "alice", "body": "hi", "created_at": "2026-01-01"},
+			{"id": "c2", "author": "bob", "body": "yo", "created_at": "2026-01-02"},
+		}),
+	)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if got != "alice:hi;bob:yo;" {
+		t.Errorf("render = %q, want %q", got, "alice:hi;bob:yo;")
+	}
+}
+
+func TestWithNewComments_EmptySliceNoOp(t *testing.T) {
+	t.Parallel()
+
+	tmpl, err := Parse(
+		`{{ if .new_comments }}has{{ else }}none{{ end }}`,
+		"WORKFLOW.md", 0,
+	)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	got, err := tmpl.Render(
+		map[string]any{"title": "t"}, nil,
+		RunContext{TurnNumber: 1, MaxTurns: 5},
+		WithNewComments(nil),
+	)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if got != "none" {
+		t.Errorf("render = %q, want %q (nil slice should leave nil default)", got, "none")
+	}
+}

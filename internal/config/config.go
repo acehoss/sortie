@@ -41,6 +41,11 @@ type ServiceConfig struct {
 	// map.
 	Reactions map[string]ReactionConfig
 
+	// Steering holds configuration for mid-run input sources that
+	// inject content into the active worker session between turns
+	// (distinct from reactions, which trigger new dispatches).
+	Steering SteeringConfig
+
 	// DBPath is the environment- and tilde-expanded path for the SQLite
 	// database. It may be relative; callers resolve it against the
 	// WORKFLOW.md directory. Empty string means the caller should apply
@@ -125,6 +130,36 @@ var knownTopLevelKeys = map[string]bool{
 	"ci_feedback": true,
 	"self_review": true,
 	"reactions":   true,
+	"steering":    true,
+}
+
+// DefaultSteeringSelfMarker is the substring appended to orchestrator-
+// authored comments and used to detect them on the steering read path.
+// Operators may override via steering.issue_comments.self_marker.
+const DefaultSteeringSelfMarker = "<!-- sortie:no-steer -->"
+
+// SteeringConfig holds per-source configuration for mid-run input
+// channels. Zero-value disables every source.
+type SteeringConfig struct {
+	IssueComments IssueCommentsSteeringConfig
+}
+
+// IssueCommentsSteeringConfig controls between-turn polling of tracker
+// comments for the active issue. Disabled by default.
+type IssueCommentsSteeringConfig struct {
+	// Enabled gates the between-turn FetchIssueComments call. When
+	// false (the default) the worker performs no extra adapter calls.
+	Enabled bool
+
+	// AuthorFilter lists comment-author display names or usernames to
+	// drop before delivery. Case-insensitive exact match.
+	AuthorFilter []string
+
+	// SelfMarker is a substring used to identify orchestrator-authored
+	// comments so they are never re-injected. Comments whose body
+	// contains the marker are dropped. Empty disables the marker
+	// filter; defaults to [DefaultSteeringSelfMarker].
+	SelfMarker string
 }
 
 // NewServiceConfig converts a raw front matter map into a validated
@@ -260,6 +295,11 @@ func NewServiceConfig(raw map[string]any) (ServiceConfig, error) {
 		return ServiceConfig{}, err
 	}
 
+	steering, err := buildSteeringConfig(extractSubMap(raw, "steering"))
+	if err != nil {
+		return ServiceConfig{}, err
+	}
+
 	if ciReaction, ok := reactions["ci_failure"]; ok {
 		ciFeedback, err = populateCIFeedbackFromReactions(ciReaction)
 		if err != nil {
@@ -288,6 +328,7 @@ func NewServiceConfig(raw map[string]any) (ServiceConfig, error) {
 		CIFeedback: ciFeedback,
 		SelfReview: selfReview,
 		Reactions:  reactions,
+		Steering:   steering,
 		DBPath:     dbPath,
 		Extensions: extensions,
 	}, nil
@@ -708,6 +749,72 @@ func buildSelfReviewConfig(m map[string]any) (SelfReviewConfig, error) {
 		MaxDiffBytes:          maxDiffBytes,
 		Reviewer:              reviewer,
 	}, nil
+}
+
+func buildSteeringConfig(m map[string]any) (SteeringConfig, error) {
+	if len(m) == 0 {
+		return SteeringConfig{}, nil
+	}
+
+	icRaw, exists := m["issue_comments"]
+	if !exists || icRaw == nil {
+		return SteeringConfig{}, nil
+	}
+	icMap, ok := icRaw.(map[string]any)
+	if !ok {
+		return SteeringConfig{}, &ConfigError{
+			Field:   "steering.issue_comments",
+			Message: fmt.Sprintf("expected map, got %T", icRaw),
+		}
+	}
+
+	ic := IssueCommentsSteeringConfig{SelfMarker: DefaultSteeringSelfMarker}
+
+	if v, ok := icMap["enabled"]; ok && v != nil {
+		b, isBool := v.(bool)
+		if !isBool {
+			return SteeringConfig{}, &ConfigError{
+				Field:   "steering.issue_comments.enabled",
+				Message: fmt.Sprintf("expected bool, got %T", v),
+			}
+		}
+		ic.Enabled = b
+	}
+
+	if v, ok := icMap["author_filter"]; ok && v != nil {
+		slice, isSlice := v.([]any)
+		if !isSlice {
+			return SteeringConfig{}, &ConfigError{
+				Field:   "steering.issue_comments.author_filter",
+				Message: fmt.Sprintf("expected list of strings, got %T", v),
+			}
+		}
+		filter := make([]string, 0, len(slice))
+		for i, elem := range slice {
+			s, isStr := elem.(string)
+			if !isStr {
+				return SteeringConfig{}, &ConfigError{
+					Field:   fmt.Sprintf("steering.issue_comments.author_filter[%d]", i),
+					Message: fmt.Sprintf("expected string element, got %T", elem),
+				}
+			}
+			filter = append(filter, s)
+		}
+		ic.AuthorFilter = filter
+	}
+
+	if v, ok := icMap["self_marker"]; ok && v != nil {
+		s, isStr := v.(string)
+		if !isStr {
+			return SteeringConfig{}, &ConfigError{
+				Field:   "steering.issue_comments.self_marker",
+				Message: fmt.Sprintf("expected string, got %T", v),
+			}
+		}
+		ic.SelfMarker = s
+	}
+
+	return SteeringConfig{IssueComments: ic}, nil
 }
 
 // validateHandoffState checks that handoffState does not collide with

@@ -267,6 +267,7 @@ func (o *Orchestrator) Run(ctx context.Context) {
 				CommentsConfig:    cfg.Tracker.Comments,
 				CIProvider:        o.ciProvider,
 				SCMAdapter:        o.scmAdapter,
+				Steering:          cfg.Steering,
 			})
 			o.updateGauges(time.Now())
 			o.notifyObservers()
@@ -400,6 +401,7 @@ func (o *Orchestrator) handleTick(ctx context.Context) {
 		SCMAdapter:        o.scmAdapter,
 		ReviewConfig:      o.reviewConfig,
 		ReviewPendingTTL:  reviewPendingDefaultTTL,
+		Steering:          cfg.Steering,
 	})
 
 	// Sweep terminal workspaces periodically to catch issues that
@@ -661,6 +663,7 @@ func (o *Orchestrator) drainRunningWorkers() {
 				HostPool:          o.hostPool,
 				CommentsConfig:    cfg.Tracker.Comments,
 				CIProvider:        o.ciProvider,
+				Steering:          cfg.Steering,
 			})
 			o.updateGauges(time.Now())
 			o.notifyObservers()

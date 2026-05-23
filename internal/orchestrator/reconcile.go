@@ -103,6 +103,12 @@ type ReconcileParams struct {
 	// ReviewPendingTTL is the maximum age of a review PendingReaction
 	// entry before it is dropped. Zero disables TTL enforcement.
 	ReviewPendingTTL time.Duration
+
+	// Steering holds steering-source configuration. Only the
+	// IssueComments.SelfMarker is consulted by reaction escalation
+	// paths, so orchestrator-authored escalation comments are wrapped
+	// and not re-injected by between-turn comment polling.
+	Steering config.SteeringConfig
 }
 
 // ReconcileRunningIssues detects stalled workers and refreshes tracker
