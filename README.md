@@ -19,7 +19,7 @@ Turn tracker tickets into autonomous agent sessions. Agent-agnostic, tracker-agn
 
 </div>
 
-Sortie assumes your coding agent already produces useful results when you run it manually. Around that agent it handles parallel scheduling, isolated workspaces, persistent state with retry, CI feedback, review comments, and cost tracking. Sortie does not improve the agent's output.
+Sortie assumes your coding agent already produces useful results when you run it manually. Around that agent it handles parallel scheduling, isolated workspaces, persistent state with retry, CI feedback, review comments, between-turn comment steering, and cost tracking. Sortie does not improve the agent's output.
 
 ## Install
 
@@ -84,9 +84,9 @@ distributed coordination. For full architectural details, see
 Issue trackers and coding agents are integrated through adapter interfaces. Adding support
 for a new tracker or agent is an additive change: implement the interface in a new package.
 
-Supported trackers: GitHub Issues and Jira. Supported agents: Claude Code, Copilot, OpenCode,
-and Codex. See [`docs/decisions/`](docs/decisions/) for detailed rationale on technology
-choices.
+Supported trackers: GitHub Issues, Jira, and Linear. Supported agents: Claude Code, Copilot,
+OpenCode, and Codex. See [`docs/decisions/`](docs/decisions/) for detailed rationale on
+technology choices.
 
 ## Documentation
 
