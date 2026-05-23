@@ -273,24 +273,25 @@ Returns `[]domain.Comment` ordered by creation time ASC. Empty non-nil slice whe
 
 The `user` field is null for bot/integration comments; normalize to empty author string.
 
-### 7. `TransitionIssue` — two queries + one mutation
+### 7. `TransitionIssue` — one resolve query + one mutation
 
-Linear requires a workflow-state **UUID**, not a name. The flow is:
+Linear requires a workflow-state **UUID**, not a name. The flow walks `issue → team → states(filter)` in a single GraphQL request to resolve the UUID, then applies the update.
 
-1. Resolve the issue's team UUID. Adapter maintains an issue→team map populated by any prior `issue` read; falls back to a small read:
+1. Resolve the state UUID with one query (no team-lookup hop, no per-team cache):
    ```graphql
-   query IssueTeam($id: String!) { issue(id: $id) { id team { id } } }
-   ```
-2. Look up the team's workflow states (cached per team for the lifetime of the adapter, refreshed on miss):
-   ```graphql
-   query TeamWorkflowStates($teamId: String!) {
-     team(id: $teamId) {
-       states(first: 100) { nodes { id name type } }
+   query ResolveStateID($issueId: String!, $stateName: String!) {
+     issue(id: $issueId) {
+       team {
+         states(filter: { name: { eqIgnoreCase: $stateName } }, first: 1) {
+           nodes { id }
+         }
+       }
      }
    }
    ```
-3. Match the target state by case-insensitive name. No match → `ErrTrackerPayload` with message `no workflow state named %q in team %q`.
-4. Apply:
+   Case-insensitive match avoids casing mismatches between operator config ("in review") and Linear's stored name ("In Review"). Empty nodes array → `ErrTrackerPayload` with message `no workflow state named %q in issue's team`.
+
+2. Apply:
    ```graphql
    mutation IssueUpdateState($id: String!, $stateId: String!) {
      issueUpdate(id: $id, input: { stateId: $stateId }) {
@@ -299,7 +300,9 @@ Linear requires a workflow-state **UUID**, not a name. The flow is:
      }
    }
    ```
-5. `success: false` with no GraphQL error → `ErrTrackerAPI` (defensive; Linear typically signals failures via `errors`).
+3. `success: false` with no GraphQL error → `ErrTrackerAPI` (defensive; Linear typically signals failures via `errors`).
+
+Adapted from Symphony's `state_lookup_query` pattern. The embedded-query approach removes both the team→workflow-states cache and the issue→team cache that an unembedded design would need.
 
 ### 8. `CommentIssue` — `commentCreate` mutation
 

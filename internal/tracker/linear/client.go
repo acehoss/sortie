@@ -46,30 +46,30 @@ type Client interface {
 	// without the full issue payload.
 	QueryIssueComments(ctx context.Context, issueID string, first int, after string) (*CommentConnection, error)
 
-	// QueryIssueTeam returns the team UUID for the given issue without
-	// fetching the full issue payload. Used by the adapter to resolve
-	// team scope for workflow-state and label operations when the
-	// issue was not previously cached.
+	// QueryStateIDByName resolves a workflow state name to its UUID
+	// in the team that owns the given issue. The single query walks
+	// issue → team → states(filter: name) so neither a per-team
+	// workflow-state cache nor a separate team-UUID lookup is needed.
 	//
-	// Returns ErrTrackerNotFound when the issue does not exist.
-	QueryIssueTeam(ctx context.Context, issueID string) (teamID string, err error)
+	// Name comparison is case-insensitive (eqIgnoreCase). Returns an
+	// ErrTrackerPayload TrackerError when no state with that name
+	// exists in the issue's team. Returns ErrTrackerNotFound when the
+	// issue itself does not exist.
+	QueryStateIDByName(ctx context.Context, issueID string, stateName string) (stateID string, err error)
 
 	// QueryIssueLabels returns the team UUID and the issue's current
 	// label set in a single round-trip. Used by AddLabel to (a)
-	// resolve team scope, (b) check whether the label is already
-	// attached, and (c) build the full labelIds array for the
-	// subsequent issueUpdate (which replaces, not appends).
+	// resolve team scope for downstream label-create or team-labels
+	// cache refresh, (b) check whether the label is already attached,
+	// and (c) build the full labelIds array for the subsequent
+	// issueUpdate (which replaces, not appends).
 	//
 	// Returns ErrTrackerNotFound when the issue does not exist.
 	QueryIssueLabels(ctx context.Context, issueID string) (*IssueLabelsResult, error)
 
-	// QueryTeamWorkflowStates returns all workflow states defined for
-	// the given team. Used by TransitionIssue to resolve a target
-	// state name to its UUID. Adapter caches the result per team.
-	QueryTeamWorkflowStates(ctx context.Context, teamID string) ([]WorkflowState, error)
-
 	// QueryTeamLabels returns all labels defined for the given team.
-	// Used to refresh the adapter's per-team label cache on miss.
+	// Used to refresh the adapter's per-team label cache on miss or
+	// after a concurrent label-create race.
 	QueryTeamLabels(ctx context.Context, teamID string) ([]Label, error)
 
 	// MutationIssueUpdateState transitions an issue to the given
