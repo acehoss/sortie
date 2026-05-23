@@ -10,7 +10,7 @@
 
 - **Workflow Loader.** Parses `WORKFLOW.md` (YAML front matter + prompt body). Returns `{config, prompt_template}`. Live-reload via `fsnotify`.
 - **Config Layer.** Typed getters over front matter; defaults, `$VAR` resolution, `~` expansion, validation pre-dispatch.
-- **Issue Tracker Client.** Adapter interface (Jira, GitHub today). Fetches candidates, current states, terminal-state cleanup; normalizes to a stable `domain.Issue`.
+- **Issue Tracker Client.** Adapter interface (Jira, GitHub, Linear today). Fetches candidates, current states, terminal-state cleanup; normalizes to a stable `domain.Issue`.
 - **Orchestrator.** Owns the poll tick and the authoritative runtime state, backed by SQLite for durability. Single-writer for `running` / `claimed` / `retry_attempts`. Dispatch, retry, stop, release.
 - **Workspace Manager.** Maps issue identifier → sanitized workspace key → workspace path under workspace root. Hooks: `after_create`, `before_run`, `after_run`, `before_remove`.
 - **Agent Runner.** Builds prompt from `(issue, workflow_template)`, launches the agent subprocess via the configured agent adapter, relays updates back to the orchestrator. Optional bounded self-review loop after the coding turn loop.
@@ -29,7 +29,7 @@
 5. **Integration Layer** — tracker adapters, agent adapters, CI status providers, SCM adapters.
 6. **Observability Layer** — logs and the status surface.
 
-A layer MUST NOT import from a layer above it. Integration-specific identifiers (`jira_*`, `claude_*`, `codex_*`, `copilot_*`, `github_*`) appear only inside their adapter packages — core code uses generic vocabulary (`agent_*`, `tracker_*`, `session_*`, `workspace_*`).
+A layer MUST NOT import from a layer above it. Integration-specific identifiers (`jira_*`, `claude_*`, `codex_*`, `copilot_*`, `github_*`, `linear_*`) appear only inside their adapter packages — core code uses generic vocabulary (`agent_*`, `tracker_*`, `session_*`, `workspace_*`).
 
 ## 3. Adapter model
 
@@ -37,7 +37,7 @@ New trackers and agents are **new packages behind existing Go interfaces** — a
 
 Existing adapter dimensions:
 
-- **Tracker adapters** — Jira, GitHub.
+- **Tracker adapters** — Jira, GitHub, Linear.
 - **Agent adapters** — Claude Code, Codex, Copilot.
 - **CI status providers** — GitHub Checks (only when `ci_feedback.kind: github` or `reactions.ci_failure.provider: github`).
 - **SCM adapters** — GitHub (only when `reactions.review_comments.provider: github`).
@@ -52,7 +52,7 @@ These are reproduced here from `CLAUDE.md` for quick reference. When in doubt, `
 - **Workspace key sanitization.** Only `[A-Za-z0-9._-]` in directory names. No exceptions.
 - **Agent cwd validation.** `cwd == workspace_path` MUST be verified *before* `exec`, not after.
 - **Single-writer persistence.** SQLite WAL mode; orchestrator state mutations serialized through one authority.
-- **Generic naming in core.** `agent_*`, `tracker_*`, `session_*`, `workspace_*`. Never `jira_*`, `claude_*`, `codex_*`, `copilot_*`, `github_*` outside their adapter packages.
+- **Generic naming in core.** `agent_*`, `tracker_*`, `session_*`, `workspace_*`. Never `jira_*`, `claude_*`, `codex_*`, `copilot_*`, `github_*`, `linear_*` outside their adapter packages.
 - **Symphony is prior art, not a template.** No Symphony / Elixir / BEAM patterns or vocabulary anywhere.
 - **Integration tests are env-gated.** `SORTIE_JIRA_TEST`, `SORTIE_GITHUB_TEST`, `SORTIE_GITHUB_E2E`, `SORTIE_CLAUDE_TEST`, `SORTIE_COPILOT_TEST`. Without the guard variable, the test MUST skip cleanly — never fail.
 - **No architecture-doc references in source comments.** `docs/architecture.md`, `docs/decisions/`, section numbers, ADR numbers, and ticket IDs belong in specs, plans, and ADRs — not in `*.go` godoc or inline comments.

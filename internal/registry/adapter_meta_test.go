@@ -12,6 +12,7 @@ import (
 	_ "github.com/sortie-ai/sortie/internal/scm/github"
 	_ "github.com/sortie-ai/sortie/internal/tracker/file"
 	_ "github.com/sortie-ai/sortie/internal/tracker/jira"
+	_ "github.com/sortie-ai/sortie/internal/tracker/linear"
 )
 
 func TestAdapterMeta_RealRegistrations(t *testing.T) {
@@ -35,6 +36,12 @@ func TestAdapterMeta_RealRegistrations(t *testing.T) {
 			{
 				name:        "github requires api_key and project",
 				kind:        "github",
+				wantAPIKey:  true,
+				wantProject: true,
+			},
+			{
+				name:        "linear requires api_key and project",
+				kind:        "linear",
 				wantAPIKey:  true,
 				wantProject: true,
 			},
