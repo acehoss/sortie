@@ -38,10 +38,11 @@ type TemplateWarning struct {
 
 // topLevelKeys is the set of recognized top-level template variables.
 var topLevelKeys = map[string]struct{}{
-	"issue":      {},
-	"attempt":    {},
-	"run":        {},
-	"ci_failure": {},
+	"issue":        {},
+	"attempt":      {},
+	"run":          {},
+	"ci_failure":   {},
+	"new_comments": {},
 }
 
 // templateFieldSchema defines valid sub-fields for each top-level
@@ -81,6 +82,23 @@ var templateFieldSchema = map[string]map[string]map[string]bool{
 		"failing_count": nil,
 		"ref":           nil,
 	},
+	"new_comments": {
+		"id":         nil,
+		"author":     nil,
+		"body":       nil,
+		"created_at": nil,
+	},
+}
+
+// topLevelKeysString returns the recognized top-level variables formatted
+// for inclusion in operator-facing warning messages.
+func topLevelKeysString() string {
+	keys := maputil.SortedKeys(topLevelKeys)
+	dotted := make([]string, len(keys))
+	for i, k := range keys {
+		dotted[i] = "." + k
+	}
+	return strings.Join(dotted, ", ")
 }
 
 // AnalyzeTemplate performs static analysis on a parsed template and
@@ -189,7 +207,7 @@ func (a *analyzer) checkFieldNode(ident []string, scopeDepth int) {
 		a.warnings = append(a.warnings, TemplateWarning{
 			Kind:    WarnUnknownVar,
 			Node:    expr,
-			Message: fmt.Sprintf("unknown template variable %q; valid top-level variables are: .issue, .attempt, .run", expr),
+			Message: fmt.Sprintf("unknown template variable %q; valid top-level variables are: %s", expr, topLevelKeysString()),
 		})
 		return
 	}
@@ -213,7 +231,7 @@ func (a *analyzer) checkVariableNode(ident []string, scopeDepth int) {
 		a.warnings = append(a.warnings, TemplateWarning{
 			Kind:    WarnUnknownVar,
 			Node:    expr,
-			Message: fmt.Sprintf("unknown template variable %q; valid top-level variables are: .issue, .attempt, .run", expr),
+			Message: fmt.Sprintf("unknown template variable %q; valid top-level variables are: %s", expr, topLevelKeysString()),
 		})
 		return
 	}
