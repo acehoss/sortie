@@ -82,12 +82,12 @@ var templateFieldSchema = map[string]map[string]map[string]bool{
 		"failing_count": nil,
 		"ref":           nil,
 	},
-	"new_comments": {
-		"id":         nil,
-		"author":     nil,
-		"body":       nil,
-		"created_at": nil,
-	},
+	// new_comments is a slice — operators iterate via {{ range .new_comments }}
+	// and access sub-fields inside the range scope (which the analyzer skips).
+	// Direct {{ .new_comments.foo }} would fail at runtime, so nil here
+	// produces a "scalar with no sub-fields" warning rather than silently
+	// allowing it.
+	"new_comments": nil,
 }
 
 // topLevelKeysString returns the recognized top-level variables formatted
