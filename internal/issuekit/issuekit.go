@@ -87,6 +87,10 @@ func MarkSelfComment(text, marker string) string {
 // from seen, whose authors are absent from authorFilter
 // (case-insensitive exact), and whose bodies do not contain selfMarker
 // (when non-empty). Returns an empty slice when in is empty.
+//
+// Comments with an empty ID are always dropped: the watermark relies on
+// the ID to deduplicate across turns, so an empty-ID comment would be
+// re-delivered every turn indefinitely.
 func FilterSteeringComments(in []domain.Comment, seen map[string]bool, authorFilter []string, selfMarker string) []domain.Comment {
 	if len(in) == 0 {
 		return nil
@@ -97,7 +101,10 @@ func FilterSteeringComments(in []domain.Comment, seen map[string]bool, authorFil
 	}
 	out := make([]domain.Comment, 0, len(in))
 	for _, c := range in {
-		if c.ID != "" && seen[c.ID] {
+		if c.ID == "" {
+			continue
+		}
+		if seen[c.ID] {
 			continue
 		}
 		if authors[strings.ToLower(c.Author)] {

@@ -377,4 +377,19 @@ func TestFilterSteeringComments(t *testing.T) {
 			t.Errorf("FilterSteeringComments = %+v, want []", got)
 		}
 	})
+
+	t.Run("empty IDs are dropped", func(t *testing.T) {
+		t.Parallel()
+		// An empty ID cannot be tracked by the watermark, so the comment
+		// would be re-delivered every turn. Drop it defensively rather
+		// than spamming the agent.
+		in := []domain.Comment{
+			{ID: "", Author: "alice", Body: "untracked"},
+			{ID: "c1", Author: "alice", Body: "tracked"},
+		}
+		got := FilterSteeringComments(in, nil, nil, "")
+		if len(got) != 1 || got[0].ID != "c1" {
+			t.Errorf("FilterSteeringComments = %+v, want [c1]", got)
+		}
+	})
 }
