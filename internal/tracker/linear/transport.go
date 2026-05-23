@@ -284,32 +284,48 @@ func (c *gqlClient) QueryStateIDByName(ctx context.Context, issueID, stateName s
 }
 
 func (c *gqlClient) QueryIssueLabels(ctx context.Context, issueID string) (*IssueLabelsResult, error) {
-	vars := map[string]any{"id": issueID}
-
-	var resp struct {
-		Issue *struct {
-			Team struct {
-				ID string `json:"id"`
-			} `json:"team"`
-			Labels struct {
-				Nodes []rawLabel `json:"nodes"`
-			} `json:"labels"`
-		} `json:"issue"`
+	// MutationIssueUpdateLabels replaces (not appends) the issue's
+	// label set, so AddLabel must walk every page to avoid dropping
+	// labels past the first page when it submits the merged list.
+	out := &IssueLabelsResult{Labels: make([]Label, 0)}
+	after := ""
+	for {
+		vars := map[string]any{"id": issueID, "first": pageSize}
+		if after != "" {
+			vars["after"] = after
+		}
+		var resp struct {
+			Issue *struct {
+				Team struct {
+					ID string `json:"id"`
+				} `json:"team"`
+				Labels struct {
+					Nodes    []rawLabel `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"labels"`
+			} `json:"issue"`
+		}
+		if err := c.execute(ctx, queryIssueLabels, vars, &resp); err != nil {
+			return nil, err
+		}
+		if resp.Issue == nil {
+			return nil, notFoundf("issue %q", issueID)
+		}
+		out.TeamID = resp.Issue.Team.ID
+		for _, lbl := range resp.Issue.Labels.Nodes {
+			out.Labels = append(out.Labels, Label{ID: lbl.ID, Name: lbl.Name})
+		}
+		if !resp.Issue.Labels.PageInfo.HasNextPage {
+			return out, nil
+		}
+		if resp.Issue.Labels.PageInfo.EndCursor == "" {
+			return nil, payloadf("linear label pagination: hasNextPage=true with empty endCursor")
+		}
+		after = resp.Issue.Labels.PageInfo.EndCursor
 	}
-	if err := c.execute(ctx, queryIssueLabels, vars, &resp); err != nil {
-		return nil, err
-	}
-	if resp.Issue == nil {
-		return nil, notFoundf("issue %q", issueID)
-	}
-	out := &IssueLabelsResult{
-		TeamID: resp.Issue.Team.ID,
-		Labels: make([]Label, len(resp.Issue.Labels.Nodes)),
-	}
-	for i, lbl := range resp.Issue.Labels.Nodes {
-		out.Labels[i] = Label{ID: lbl.ID, Name: lbl.Name}
-	}
-	return out, nil
 }
 
 func (c *gqlClient) QueryTeamLabels(ctx context.Context, teamID string) ([]Label, error) {

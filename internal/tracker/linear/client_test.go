@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sortie-ai/sortie/internal/domain"
@@ -619,6 +620,75 @@ func TestQueryIssueLabels_HappyPath(t *testing.T) {
 	}
 	if len(res.Labels) != 1 || res.Labels[0].Name != "Bug" {
 		t.Errorf("labels = %+v", res.Labels)
+	}
+}
+
+func TestQueryIssueLabels_WalksAllPages(t *testing.T) {
+	t.Parallel()
+	// MutationIssueUpdateLabels replaces the label set, so dropping
+	// any label past page 1 would silently wipe it. Verify the client
+	// walks every page and the caller's "after" cursor is propagated.
+	var calls int32
+	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {
+		n := atomic.AddInt32(&calls, 1)
+		switch n {
+		case 1:
+			if got := req.Variables["after"]; got != nil {
+				t.Errorf("page 1 after = %v, want nil", got)
+			}
+			return 200, nil, map[string]any{
+				"data": map[string]any{
+					"issue": map[string]any{
+						"id":   "iss-1",
+						"team": map[string]any{"id": "team-eng"},
+						"labels": map[string]any{
+							"nodes": []map[string]any{
+								{"id": "lbl-1", "name": "L1"},
+								{"id": "lbl-2", "name": "L2"},
+							},
+							"pageInfo": map[string]any{"hasNextPage": true, "endCursor": "cursor-1"},
+						},
+					},
+				},
+			}
+		case 2:
+			if got := req.Variables["after"]; got != "cursor-1" {
+				t.Errorf("page 2 after = %v, want cursor-1", got)
+			}
+			return 200, nil, map[string]any{
+				"data": map[string]any{
+					"issue": map[string]any{
+						"id":   "iss-1",
+						"team": map[string]any{"id": "team-eng"},
+						"labels": map[string]any{
+							"nodes": []map[string]any{
+								{"id": "lbl-3", "name": "L3"},
+							},
+							"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+						},
+					},
+				},
+			}
+		default:
+			t.Fatalf("unexpected call %d", n)
+			return 0, nil, nil
+		}
+	})
+
+	res, err := client.QueryIssueLabels(context.Background(), "iss-1")
+	if err != nil {
+		t.Fatalf("QueryIssueLabels: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("call count = %d, want 2", got)
+	}
+	if len(res.Labels) != 3 {
+		t.Fatalf("labels = %+v, want 3", res.Labels)
+	}
+	for i, want := range []string{"lbl-1", "lbl-2", "lbl-3"} {
+		if res.Labels[i].ID != want {
+			t.Errorf("labels[%d].ID = %q, want %q", i, res.Labels[i].ID, want)
+		}
 	}
 }
 

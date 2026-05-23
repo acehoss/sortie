@@ -90,11 +90,14 @@ query SortieLinearResolveStateID($issueId: String!, $stateName: String!) {
 }`
 
 	queryIssueLabels = `
-query SortieLinearIssueLabels($id: String!) {
+query SortieLinearIssueLabels($id: String!, $first: Int!, $after: String) {
   issue(id: $id) {
     id
     team { id }
-    labels(first: 50) { nodes { id name } }
+    labels(first: $first, after: $after) {
+      nodes { id name }
+      pageInfo { hasNextPage endCursor }
+    }
   }
 }`
 
