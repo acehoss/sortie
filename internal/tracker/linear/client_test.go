@@ -233,6 +233,30 @@ func TestQueryIssueByKey_NullDataReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestQueryIssueByKey_EntityNotFoundMessageReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	// Linear's live API returns "Entity not found: Issue" under
+	// extension code INPUT_ERROR (not ENTITY_NOT_FOUND as the docs
+	// suggest). The classifier must promote any "Entity not found"
+	// prefix to ErrTrackerNotFound regardless of extension code.
+	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {
+		return 200, nil, map[string]any{
+			"errors": []map[string]any{
+				{
+					"message":    "Entity not found: Issue",
+					"extensions": map[string]any{"code": "INPUT_ERROR"},
+				},
+			},
+		}
+	})
+
+	_, err := client.QueryIssueByKey(context.Background(), "ENG-99999999")
+	var te *domain.TrackerError
+	if !errors.As(err, &te) || te.Kind != domain.ErrTrackerNotFound {
+		t.Errorf("err = %v, want ErrTrackerNotFound", err)
+	}
+}
+
 func TestQueryIssueStatesByKeys_BuildsAliasedQueryAndMergesResults(t *testing.T) {
 	t.Parallel()
 	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {

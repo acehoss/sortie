@@ -528,6 +528,13 @@ func classifyGraphQLErrors(errs []gqlError) error {
 	case "RATELIMITED":
 		kind = domain.ErrTrackerAPI
 	}
+	// Linear's actual API surfaces missing entities under several
+	// extension codes (observed: INPUT_ERROR, FEATURE_NOT_ACCESSIBLE),
+	// not just ENTITY_NOT_FOUND. Promote any "Entity not found" prefix
+	// to NotFound so callers can rely on domain.IsNotFound.
+	if kind != domain.ErrTrackerNotFound && strings.HasPrefix(first.Message, "Entity not found") {
+		kind = domain.ErrTrackerNotFound
+	}
 	msg := first.Message
 	if msg == "" {
 		msg = fmt.Sprintf("linear: graphql error (code=%s)", code)
