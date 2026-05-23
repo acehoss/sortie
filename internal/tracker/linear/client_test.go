@@ -745,6 +745,73 @@ func TestMutationIssueUpdateLabels_HappyPath(t *testing.T) {
 	}
 }
 
+func TestQueryViewer_ReturnsAuthenticatedUserID(t *testing.T) {
+	t.Parallel()
+	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {
+		if !strings.Contains(req.Query, "viewer { id }") {
+			t.Errorf("query missing viewer selection: %s", req.Query)
+		}
+		return 200, nil, map[string]any{
+			"data": map[string]any{
+				"viewer": map[string]any{"id": "user-uuid-123"},
+			},
+		}
+	})
+
+	got, err := client.QueryViewer(context.Background())
+	if err != nil {
+		t.Fatalf("QueryViewer: %v", err)
+	}
+	if got != "user-uuid-123" {
+		t.Errorf("got = %q, want user-uuid-123", got)
+	}
+}
+
+func TestQueryViewer_NullViewerReturnsPayloadError(t *testing.T) {
+	t.Parallel()
+	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {
+		return 200, nil, map[string]any{
+			"data": map[string]any{"viewer": nil},
+		}
+	})
+
+	_, err := client.QueryViewer(context.Background())
+	var te *domain.TrackerError
+	if !errors.As(err, &te) || te.Kind != domain.ErrTrackerPayload {
+		t.Errorf("err = %v, want ErrTrackerPayload", err)
+	}
+}
+
+func TestQueryIssues_AssigneeFilterForwardedToServer(t *testing.T) {
+	t.Parallel()
+	client := newTestClient(t, func(t *testing.T, req gqlReq) (int, http.Header, any) {
+		// Sanity: the assignee filter must reach the GraphQL filter
+		// object so Linear's server-side filter can apply it.
+		filter, _ := req.Variables["filter"].(map[string]any)
+		assignee, _ := filter["assignee"].(map[string]any)
+		idFilter, _ := assignee["id"].(map[string]any)
+		if got := idFilter["eq"]; got != "user-me" {
+			t.Errorf("filter.assignee.id.eq = %v, want user-me", got)
+		}
+		return 200, nil, map[string]any{
+			"data": map[string]any{
+				"issues": map[string]any{
+					"nodes":    []any{},
+					"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+				},
+			},
+		}
+	})
+
+	_, err := client.QueryIssues(context.Background(), linear.IssuesFilter{
+		TeamKey:    "ENG",
+		AssigneeID: "user-me",
+	}, 50, "")
+	if err != nil {
+		t.Fatalf("QueryIssues: %v", err)
+	}
+}
+
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

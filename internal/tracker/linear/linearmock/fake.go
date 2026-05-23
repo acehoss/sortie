@@ -63,6 +63,11 @@ type Fake struct {
 	NextLabelID   int
 	NextCommentID int
 
+	// ViewerID is the user UUID returned by QueryViewer. Tests that
+	// exercise the assignee filter with the "me" resolution path pre-seed
+	// this; an empty value causes QueryViewer to return a payload error.
+	ViewerID string
+
 	// Override hooks. When non-nil, the fake calls the hook instead
 	// of running its default stateful behavior. Each hook has the
 	// same signature as the corresponding Client method.
@@ -77,6 +82,7 @@ type Fake struct {
 	MutationIssueUpdateLabelsFunc  func(ctx context.Context, issueID string, labelIDs []string) error
 	MutationCommentCreateFunc      func(ctx context.Context, issueID string, body string) (string, error)
 	MutationIssueLabelCreateFunc   func(ctx context.Context, teamID string, name string) (string, error)
+	QueryViewerFunc                func(ctx context.Context) (string, error)
 }
 
 // TeamData is the per-team registry of workflow states and labels.
@@ -431,6 +437,24 @@ func (f *Fake) MutationIssueLabelCreate(ctx context.Context, teamID string, name
 	return id, nil
 }
 
+func (f *Fake) QueryViewer(ctx context.Context) (string, error) {
+	if f.QueryViewerFunc != nil {
+		return f.QueryViewerFunc(ctx)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ViewerID == "" {
+		return "", &domain.TrackerError{
+			Kind:    domain.ErrTrackerPayload,
+			Message: "linearmock: ViewerID not seeded",
+		}
+	}
+	return f.ViewerID, nil
+}
+
 // ───── internal helpers ───────────────────────────────────────────────
 
 func (f *Fake) lookupIssueLocked(key string) *linear.Issue {
@@ -461,6 +485,11 @@ func matchesFilter(iss *linear.Issue, filter linear.IssuesFilter, teams map[stri
 			}
 		}
 		if !matched {
+			return false
+		}
+	}
+	if filter.AssigneeID != "" {
+		if iss.Assignee == nil || iss.Assignee.ID != filter.AssigneeID {
 			return false
 		}
 	}

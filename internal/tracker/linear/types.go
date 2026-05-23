@@ -29,6 +29,7 @@ type PageInfo struct {
 // User represents a Linear user as referenced by issues and comments.
 // Linear returns nil for bot or integration actors.
 type User struct {
+	ID          string
 	DisplayName string
 	Name        string
 	Email       string

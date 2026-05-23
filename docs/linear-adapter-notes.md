@@ -36,6 +36,7 @@ Optional adapter config (read from the workflow's `extensions.linear` object):
 | Key                | Default                                                          | Purpose                                          |
 | ------------------ | ---------------------------------------------------------------- | ------------------------------------------------ |
 | `active_states`    | `["Backlog", "Todo"]`                                            | Names of states treated as candidate-eligible.   |
+| `assignee`         | empty (no assignee filter)                                       | Linear user UUID, or literal `"me"` to resolve via the viewer query at adapter construction. Restricts both `FetchCandidateIssues` and `FetchIssuesByStates` to issues assigned to that user. |
 | `query_filter`     | empty                                                            | Reserved for an extra `IssueFilter` JSON object. |
 
 The team key (project) does not need to be a UUID — Linear's `TeamFilter` accepts `key: { eq: "ENG" }` directly. The adapter caches the resolved team UUID after the first query for use in label and workflow-state lookups.

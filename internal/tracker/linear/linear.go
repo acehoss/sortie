@@ -32,6 +32,7 @@ type LinearAdapter struct {
 	client       Client
 	teamKey      string
 	activeStates []string
+	assigneeID   string // resolved user UUID; empty means no assignee filter
 	metrics      domain.Metrics // nil-safe: check before calling
 
 	// labelCacheMu guards labelCache. The cache is populated lazily
@@ -46,8 +47,10 @@ var _ domain.TrackerAdapter = (*LinearAdapter)(nil)
 
 // newAdapterWithClient constructs a LinearAdapter against the given
 // Client. Used by tests with linearmock.Fake and by the public
-// constructor with the real GraphQL transport.
-func newAdapterWithClient(client Client, teamKey string, activeStates []string) *LinearAdapter {
+// constructor with the real GraphQL transport. assigneeID is the
+// already-resolved user UUID (the registry resolves "me" via
+// QueryViewer before reaching this point); empty means no filter.
+func newAdapterWithClient(client Client, teamKey string, activeStates []string, assigneeID string) *LinearAdapter {
 	if len(activeStates) == 0 {
 		activeStates = defaultActiveStates
 	}
@@ -55,6 +58,7 @@ func newAdapterWithClient(client Client, teamKey string, activeStates []string) 
 		client:       client,
 		teamKey:      teamKey,
 		activeStates: activeStates,
+		assigneeID:   assigneeID,
 		labelCache:   map[string]map[string]string{},
 	}
 }
@@ -94,6 +98,7 @@ func (a *LinearAdapter) FetchCandidateIssues(ctx context.Context) ([]domain.Issu
 		issues, fetchErr := a.paginatedIssues(ctx, IssuesFilter{
 			TeamKey:    a.teamKey,
 			StateNames: a.activeStates,
+			AssigneeID: a.assigneeID,
 		})
 		if fetchErr != nil {
 			return fetchErr
@@ -138,6 +143,7 @@ func (a *LinearAdapter) FetchIssuesByStates(ctx context.Context, states []string
 		issues, fetchErr := a.paginatedIssues(ctx, IssuesFilter{
 			TeamKey:    a.teamKey,
 			StateNames: states,
+			AssigneeID: a.assigneeID,
 		})
 		if fetchErr != nil {
 			return fetchErr

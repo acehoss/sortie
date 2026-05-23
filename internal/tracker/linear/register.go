@@ -1,6 +1,7 @@
 package linear
 
 import (
+	"context"
 	"strings"
 
 	"github.com/sortie-ai/sortie/internal/domain"
@@ -20,7 +21,9 @@ func init() {
 // team key, e.g. "ENG"). Optional: "endpoint" (defaults to
 // https://api.linear.app/graphql), "use_bearer" (set to true when
 // api_key is an OAuth access token), "user_agent", "active_states"
-// (defaults to ["Backlog", "Todo"]).
+// (defaults to ["Backlog", "Todo"]), "assignee" (Linear user UUID, or
+// "me" to resolve via the viewer query — restricts candidate issues
+// to those assigned to the given user).
 func NewLinearAdapter(config map[string]any) (domain.TrackerAdapter, error) {
 	teamKey, activeStates, err := extractAdapterConfig(config)
 	if err != nil {
@@ -50,5 +53,32 @@ func NewLinearAdapter(config map[string]any) (domain.TrackerAdapter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newAdapterWithClient(client, teamKey, activeStates), nil
+
+	assigneeID, err := resolveAssignee(client, config["assignee"])
+	if err != nil {
+		return nil, err
+	}
+
+	return newAdapterWithClient(client, teamKey, activeStates, assigneeID), nil
+}
+
+// resolveAssignee converts the workflow's assignee config value into a
+// concrete Linear user UUID. Returns empty when no filter is requested.
+// The literal string "me" triggers a viewer query against Linear; any
+// other non-empty string is passed through unchanged on the assumption
+// that it is already a UUID.
+func resolveAssignee(client Client, raw any) (string, error) {
+	s, _ := raw.(string)
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", nil
+	}
+	if s != "me" {
+		return s, nil
+	}
+	id, err := client.QueryViewer(context.Background())
+	if err != nil {
+		return "", err
+	}
+	return id, nil
 }

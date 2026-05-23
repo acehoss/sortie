@@ -16,7 +16,7 @@ import (
 func newAdapter(t *testing.T) (*linear.LinearAdapter, *linearmock.Fake) {
 	t.Helper()
 	fake := linearmock.NewWithSampleData()
-	adapter := linear.NewAdapterForTest(fake, "ENG", []string{"Backlog", "Todo"})
+	adapter := linear.NewAdapterForTest(fake, "ENG", []string{"Backlog", "Todo"}, "")
 	return adapter, fake
 }
 
@@ -38,6 +38,69 @@ func TestFetchCandidateIssues_ReturnsActiveStatesOnly(t *testing.T) {
 		if iss.Comments != nil {
 			t.Errorf("candidate %s has non-nil Comments; want nil to defer comment fetch", iss.Identifier)
 		}
+	}
+}
+
+func TestResolveAssignee_MeQueriesViewer(t *testing.T) {
+	t.Parallel()
+	fake := linearmock.New()
+	fake.ViewerID = "user-resolved-from-viewer"
+
+	got, err := linear.ResolveAssigneeForTest(fake, "me")
+	if err != nil {
+		t.Fatalf("ResolveAssignee(me): %v", err)
+	}
+	if got != "user-resolved-from-viewer" {
+		t.Errorf("got = %q, want user-resolved-from-viewer", got)
+	}
+}
+
+func TestResolveAssignee_UUIDPassthroughSkipsViewer(t *testing.T) {
+	t.Parallel()
+	fake := linearmock.New()
+	// ViewerID intentionally left empty — a viewer call would error.
+	// A non-"me" string must be returned unchanged without that call.
+	got, err := linear.ResolveAssigneeForTest(fake, "deadbeef-0000-0000-0000-000000000000")
+	if err != nil {
+		t.Fatalf("ResolveAssignee(uuid): %v", err)
+	}
+	if got != "deadbeef-0000-0000-0000-000000000000" {
+		t.Errorf("got = %q, want UUID returned unchanged", got)
+	}
+}
+
+func TestResolveAssignee_EmptyConfigReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	fake := linearmock.New()
+	got, err := linear.ResolveAssigneeForTest(fake, nil)
+	if err != nil {
+		t.Fatalf("ResolveAssignee(nil): %v", err)
+	}
+	if got != "" {
+		t.Errorf("got = %q, want empty (no filter)", got)
+	}
+}
+
+func TestFetchCandidateIssues_AssigneeFilterDropsUnassigned(t *testing.T) {
+	t.Parallel()
+	fake := linearmock.NewWithSampleData()
+	// Assign ENG-2 to the configured assignee; leave ENG-1 unassigned.
+	const me = "user-me"
+	fake.WithLock(func() {
+		fake.Issues["iss-2"].Assignee = &linear.User{ID: me, DisplayName: "Me"}
+	})
+
+	adapter := linear.NewAdapterForTest(fake, "ENG", []string{"Backlog", "Todo"}, me)
+	issues, err := adapter.FetchCandidateIssues(context.Background())
+	if err != nil {
+		t.Fatalf("FetchCandidateIssues: %v", err)
+	}
+	if len(issues) != 1 || issues[0].Identifier != "ENG-2" {
+		ids := make([]string, len(issues))
+		for i, iss := range issues {
+			ids[i] = iss.Identifier
+		}
+		t.Errorf("candidates = %v, want [ENG-2] (only the assigned issue)", ids)
 	}
 }
 

@@ -115,6 +115,9 @@ func (c *gqlClient) QueryIssues(ctx context.Context, filter IssuesFilter, first 
 	if len(filter.StateNames) > 0 {
 		gqlFilter["state"] = map[string]any{"name": map[string]any{"in": filter.StateNames}}
 	}
+	if filter.AssigneeID != "" {
+		gqlFilter["assignee"] = map[string]any{"id": map[string]any{"eq": filter.AssigneeID}}
+	}
 	vars := map[string]any{
 		"filter":        gqlFilter,
 		"first":         first,
@@ -349,6 +352,21 @@ func (c *gqlClient) QueryTeamLabels(ctx context.Context, teamID string) ([]Label
 		out[i] = Label{ID: lbl.ID, Name: lbl.Name}
 	}
 	return out, nil
+}
+
+func (c *gqlClient) QueryViewer(ctx context.Context) (string, error) {
+	var resp struct {
+		Viewer *struct {
+			ID string `json:"id"`
+		} `json:"viewer"`
+	}
+	if err := c.execute(ctx, queryViewer, nil, &resp); err != nil {
+		return "", err
+	}
+	if resp.Viewer == nil || resp.Viewer.ID == "" {
+		return "", payloadf("linear: viewer query returned no user")
+	}
+	return resp.Viewer.ID, nil
 }
 
 func (c *gqlClient) MutationIssueUpdateState(ctx context.Context, issueID, stateID string) error {

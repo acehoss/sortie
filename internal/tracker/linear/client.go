@@ -92,6 +92,11 @@ type Client interface {
 	// ErrTrackerPayload and a message containing the substring
 	// "already exists" — the adapter retries via QueryTeamLabels.
 	MutationIssueLabelCreate(ctx context.Context, teamID string, name string) (labelID string, err error)
+
+	// QueryViewer returns the authenticated user's UUID. Used by the
+	// adapter to resolve the operator-friendly "me" assignee config
+	// value into the concrete user ID required by the IssueFilter.
+	QueryViewer(ctx context.Context) (userID string, err error)
 }
 
 // IssuesFilter is the Sortie-shaped filter for QueryIssues. The
@@ -108,4 +113,8 @@ type IssuesFilter struct {
 	// StateNames restricts results to issues whose state.name is in
 	// the list. Nil or empty means no state filter.
 	StateNames []string
+
+	// AssigneeID restricts results to issues assigned to the given
+	// Linear user UUID. Empty means no assignee filter.
+	AssigneeID string
 }

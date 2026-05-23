@@ -20,7 +20,7 @@ query SortieLinearIssues($filter: IssueFilter!, $first: Int!, $relationFirst: In
       createdAt
       updatedAt
       state { id name type }
-      assignee { displayName name email }
+      assignee { id displayName name email }
       parent { id identifier }
       team { id }
       labels(first: 50) { nodes { id name } }
@@ -48,7 +48,7 @@ query SortieLinearIssue($id: String!, $relationFirst: Int!) {
     createdAt
     updatedAt
     state { id name type }
-    assignee { displayName name email }
+    assignee { id displayName name email }
     parent { id identifier }
     team { id }
     labels(first: 50) { nodes { id name } }
@@ -87,6 +87,11 @@ query SortieLinearResolveStateID($issueId: String!, $stateName: String!) {
       }
     }
   }
+}`
+
+	queryViewer = `
+query SortieLinearViewer {
+  viewer { id }
 }`
 
 	queryIssueLabels = `
