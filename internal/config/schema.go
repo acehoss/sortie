@@ -47,6 +47,7 @@ var knownFieldsRegistry = map[string]SectionSchema{
 			{Name: "active_states", Type: FieldStringList},
 			{Name: "terminal_states", Type: FieldStringList},
 			{Name: "query_filter", Type: FieldString},
+			{Name: "assignee", Type: FieldString},
 			{Name: "handoff_state", Type: FieldString},
 			{Name: "in_progress_state", Type: FieldString},
 			{Name: "comments", Type: FieldMap, Nested: []FieldDef{
